@@ -1,0 +1,546 @@
+2026-03-10 11:13:50  INFO     ============================================================
+2026-03-10 11:13:50  INFO     QualityDB Heureka Scraper — starting run
+2026-03-10 11:13:50  INFO     ============================================================
+2026-03-10 11:13:50  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-10 11:13:50  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-10 11:13:50  WARNING    Request failed: 403 Client Error: Forbidden for url: https://televize.heureka.cz/?sort=rating
+2026-03-10 11:13:50  INFO        No products returned — stopping.
+2026-03-10 11:13:51  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-10 11:13:51  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-10 11:13:51  WARNING    Request failed: 403 Client Error: Forbidden for url: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-10 11:13:51  INFO        No products returned — stopping.
+2026-03-10 11:13:53  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-10 11:13:53  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-10 11:13:53  WARNING    Request failed: 403 Client Error: Forbidden for url: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-10 11:13:53  INFO        No products returned — stopping.
+2026-03-10 11:13:54  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-10 11:13:54  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-10 11:13:55  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-10 11:13:55  INFO        No products returned — stopping.
+2026-03-10 11:13:56  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-10 11:13:56  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-10 11:13:56  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-10 11:13:56  INFO        No products returned — stopping.
+2026-03-10 11:13:58  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-10 11:13:58  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-10 11:13:58  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-10 11:13:58  INFO        No products returned — stopping.
+2026-03-10 11:13:59  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-10 11:13:59  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-10 11:13:59  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-10 11:13:59  INFO        No products returned — stopping.
+2026-03-10 11:14:01  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-10 11:14:01  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-10 11:14:01  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-10 11:14:01  INFO        No products returned — stopping.
+2026-03-10 11:14:02  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-10 11:14:02  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-10 11:14:03  WARNING    Request failed: 403 Client Error: Forbidden for url: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-10 11:14:03  INFO        No products returned — stopping.
+2026-03-10 11:14:04  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-10 11:14:04  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-10 11:14:04  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-10 11:14:04  INFO        No products returned — stopping.
+2026-03-10 11:14:06  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-10 11:14:06  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-10 11:14:06  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-10 11:14:06  INFO        No products returned — stopping.
+2026-03-10 11:14:07  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-10 11:14:07  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-10 11:14:07  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-10 11:14:07  INFO        No products returned — stopping.
+2026-03-10 11:14:09  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-10 11:14:09  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-10 11:14:09  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-10 11:14:09  INFO        No products returned — stopping.
+2026-03-10 11:14:11  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-10 11:14:11  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-10 11:14:11  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-10 11:14:11  INFO        No products returned — stopping.
+2026-03-10 11:14:12  INFO     ============================================================
+2026-03-10 11:14:12  INFO     Run complete — 0 new products added across 14 categories.
+2026-03-10 11:14:12  INFO     ============================================================
+2026-03-10 11:17:52  INFO     ============================================================
+2026-03-10 11:17:52  INFO     QualityDB Heureka Scraper — starting run
+2026-03-10 11:17:52  INFO     ============================================================
+2026-03-10 11:17:52  INFO     Warming up session (visiting homepage)…
+2026-03-10 11:17:52  WARNING  Session warmup failed (403 Client Error: Forbidden for url: https://www.heureka.cz/) — will try scraping anyway.
+2026-03-10 11:17:53  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-10 11:17:53  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-10 11:17:53  WARNING    Request failed: 403 Client Error: Forbidden for url: https://televize.heureka.cz/?sort=rating
+2026-03-10 11:17:53  INFO        No products returned — stopping.
+2026-03-10 11:17:55  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-10 11:17:55  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-10 11:17:55  WARNING    Request failed: 403 Client Error: Forbidden for url: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-10 11:17:55  INFO        No products returned — stopping.
+2026-03-10 11:17:57  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-10 11:17:57  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-10 11:17:57  WARNING    Request failed: 403 Client Error: Forbidden for url: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-10 11:17:57  INFO        No products returned — stopping.
+2026-03-10 11:17:58  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-10 11:17:58  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-10 11:17:58  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-10 11:17:58  INFO        No products returned — stopping.
+2026-03-10 11:18:00  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-10 11:18:00  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-10 11:18:00  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-10 11:18:00  INFO        No products returned — stopping.
+2026-03-10 11:18:01  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-10 11:18:01  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-10 11:18:02  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-10 11:18:02  INFO        No products returned — stopping.
+2026-03-10 11:18:03  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-10 11:18:03  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-10 11:18:03  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-10 11:18:03  INFO        No products returned — stopping.
+2026-03-10 11:18:05  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-10 11:18:05  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-10 11:18:05  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-10 11:18:05  INFO        No products returned — stopping.
+2026-03-10 11:18:06  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-10 11:18:06  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-10 11:18:06  WARNING    Request failed: 403 Client Error: Forbidden for url: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-10 11:18:06  INFO        No products returned — stopping.
+2026-03-10 11:18:08  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-10 11:18:08  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-10 11:18:08  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-10 11:18:08  INFO        No products returned — stopping.
+2026-03-10 11:18:09  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-10 11:18:09  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-10 11:18:10  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-10 11:18:10  INFO        No products returned — stopping.
+2026-03-10 11:18:11  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-10 11:18:11  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-10 11:18:11  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-10 11:18:11  INFO        No products returned — stopping.
+2026-03-10 11:18:13  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-10 11:18:13  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-10 11:18:13  WARNING    Request failed: 403 Client Error: Forbidden for url: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-10 11:18:13  INFO        No products returned — stopping.
+2026-03-10 11:18:14  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-10 11:18:14  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-10 11:18:14  WARNING    Request failed: 403 Client Error: Forbidden for url: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-10 11:18:14  INFO        No products returned — stopping.
+2026-03-10 11:18:16  INFO     ============================================================
+2026-03-10 11:18:16  INFO     Run complete — 0 new products added across 14 categories.
+2026-03-10 11:18:16  INFO     ============================================================
+2026-03-11 12:41:31  INFO     ============================================================
+2026-03-11 12:41:31  INFO     QualityDB Heureka Scraper — starting run
+2026-03-11 12:41:31  INFO     ============================================================
+2026-03-11 12:41:31  INFO     Warming up session (visiting homepage)…
+2026-03-11 12:41:31  INFO     Session ready. Cookies obtained: 6
+2026-03-11 12:41:34  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-11 12:41:34  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-11 12:41:35  INFO        Found 24 | Qualified: 12 | New in DB: 12 | Lowest rating: 0%
+2026-03-11 12:41:35  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:36  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-11 12:41:36  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-11 12:41:38  INFO        Found 5 | Qualified: 1 | New in DB: 1 | Lowest rating: 0%
+2026-03-11 12:41:38  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:39  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-11 12:41:39  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-11 12:41:40  INFO        Found 24 | Qualified: 15 | New in DB: 12 | Lowest rating: 0%
+2026-03-11 12:41:40  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:42  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-11 12:41:42  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-11 12:41:44  INFO        Found 24 | Qualified: 16 | New in DB: 15 | Lowest rating: 0%
+2026-03-11 12:41:44  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:45  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-11 12:41:45  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-11 12:41:47  INFO        Found 24 | Qualified: 10 | New in DB: 10 | Lowest rating: 0%
+2026-03-11 12:41:47  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:48  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-11 12:41:48  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-11 12:41:50  INFO        Found 24 | Qualified: 10 | New in DB: 10 | Lowest rating: 0%
+2026-03-11 12:41:50  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:52  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-11 12:41:52  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-11 12:41:55  INFO        Found 24 | Qualified: 8 | New in DB: 8 | Lowest rating: 0%
+2026-03-11 12:41:55  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:41:56  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-11 12:41:56  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-11 12:41:58  INFO        Found 24 | Qualified: 11 | New in DB: 11 | Lowest rating: 0%
+2026-03-11 12:41:58  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:42:00  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-11 12:42:00  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-11 12:42:00  WARNING    Request failed: HTTP Error 404: 
+2026-03-11 12:42:00  INFO        No products returned — stopping.
+2026-03-11 12:42:02  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-11 12:42:02  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-11 12:42:03  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:42:03  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:42:04  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-11 12:42:04  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-11 12:42:07  INFO        Found 24 | Qualified: 15 | New in DB: 15 | Lowest rating: 0%
+2026-03-11 12:42:07  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:42:08  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-11 12:42:08  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-11 12:42:10  INFO        Found 24 | Qualified: 14 | New in DB: 14 | Lowest rating: 87.0%
+2026-03-11 12:42:11  INFO        Page 2: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=2
+2026-03-11 12:42:15  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:17  INFO        Page 3: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=3
+2026-03-11 12:42:18  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:20  INFO        Page 4: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=4
+2026-03-11 12:42:21  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:23  INFO        Page 5: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=5
+2026-03-11 12:42:25  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:26  INFO        Page 6: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=6
+2026-03-11 12:42:27  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:29  INFO        Page 7: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=7
+2026-03-11 12:42:30  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:32  INFO        Page 8: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=8
+2026-03-11 12:42:34  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:36  INFO        Page 9: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=9
+2026-03-11 12:42:38  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:39  INFO        Page 10: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=10
+2026-03-11 12:42:40  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:42:40  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 12:42:42  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-11 12:42:42  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-11 12:42:44  INFO        Found 24 | Qualified: 9 | New in DB: 9 | Lowest rating: 0%
+2026-03-11 12:42:44  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:42:45  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-11 12:42:45  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-11 12:42:47  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:42:47  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:42:48  INFO     ============================================================
+2026-03-11 12:42:48  INFO     Run complete — 117 new products added across 14 categories.
+2026-03-11 12:42:48  INFO     ============================================================
+2026-03-11 12:49:10  INFO     ============================================================
+2026-03-11 12:49:10  INFO     QualityDB Heureka Scraper — starting run
+2026-03-11 12:49:10  INFO     ============================================================
+2026-03-11 12:49:10  INFO     Warming up session (visiting homepage)…
+2026-03-11 12:49:10  INFO     Session ready. Cookies obtained: 6
+2026-03-11 12:49:13  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-11 12:49:13  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-11 12:49:14  INFO        Found 24 | Qualified: 12 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:14  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:16  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-11 12:49:16  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-11 12:49:17  INFO        Found 5 | Qualified: 1 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:17  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:18  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-11 12:49:18  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-11 12:49:19  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:19  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:21  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-11 12:49:21  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-11 12:49:22  INFO        Found 24 | Qualified: 16 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:22  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:24  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-11 12:49:24  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-11 12:49:25  INFO        Found 24 | Qualified: 10 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:25  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:27  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-11 12:49:27  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-11 12:49:28  INFO        Found 24 | Qualified: 10 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:28  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:30  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-11 12:49:30  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-11 12:49:31  INFO        Found 24 | Qualified: 7 | New in DB: 1 | Lowest rating: 0%
+2026-03-11 12:49:31  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:33  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-11 12:49:33  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-11 12:49:35  INFO        Found 24 | Qualified: 11 | New in DB: 1 | Lowest rating: 0%
+2026-03-11 12:49:35  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:37  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-11 12:49:37  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-11 12:49:37  WARNING    Request failed: HTTP Error 404: 
+2026-03-11 12:49:37  INFO        No products returned — stopping.
+2026-03-11 12:49:39  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-11 12:49:39  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-11 12:49:40  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:40  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:41  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-11 12:49:41  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-11 12:49:44  INFO        Found 24 | Qualified: 15 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:49:44  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:49:46  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-11 12:49:46  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-11 12:49:47  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:49:49  INFO        Page 2: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=2
+2026-03-11 12:49:50  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:49:51  INFO        Page 3: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=3
+2026-03-11 12:49:53  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:49:54  INFO        Page 4: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=4
+2026-03-11 12:49:57  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:49:58  INFO        Page 5: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=5
+2026-03-11 12:49:59  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:01  INFO        Page 6: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=6
+2026-03-11 12:50:02  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:04  INFO        Page 7: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=7
+2026-03-11 12:50:06  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:08  INFO        Page 8: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=8
+2026-03-11 12:50:10  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:11  INFO        Page 9: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=9
+2026-03-11 12:50:13  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:14  INFO        Page 10: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=10
+2026-03-11 12:50:16  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 12:50:16  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 12:50:17  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-11 12:50:17  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-11 12:50:20  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:50:20  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:50:22  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-11 12:50:22  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-11 12:50:23  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 0%
+2026-03-11 12:50:23  INFO        Rating dropped to 0% — stopping early.
+2026-03-11 12:50:24  INFO     ============================================================
+2026-03-11 12:50:24  INFO     Run complete — 2 new products added across 14 categories.
+2026-03-11 12:50:24  INFO     ============================================================
+2026-03-11 13:09:38  INFO     ============================================================
+2026-03-11 13:09:38  INFO     QualityDB Heureka Scraper — starting run
+2026-03-11 13:09:38  INFO     ============================================================
+2026-03-11 13:09:38  INFO     Warming up session (visiting homepage)…
+2026-03-11 13:09:38  INFO     Session ready. Cookies obtained: 6
+2026-03-11 13:09:41  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-11 13:09:41  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-11 13:09:42  INFO        Found 24 | Qualified: 12 | New in DB: 0 | Lowest rating: 84.0%
+2026-03-11 13:09:42  INFO        Rating dropped to 84.0% — stopping early.
+2026-03-11 13:09:43  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-11 13:09:43  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-11 13:09:45  INFO        Found 5 | Qualified: 1 | New in DB: 0 | Lowest rating: 84.0%
+2026-03-11 13:09:45  INFO        Rating dropped to 84.0% — stopping early.
+2026-03-11 13:09:47  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-11 13:09:47  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-11 13:09:48  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:09:49  INFO        Page 2: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=2
+2026-03-11 13:09:51  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:09:52  INFO        Page 3: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=3
+2026-03-11 13:09:53  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:09:55  INFO        Page 4: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=4
+2026-03-11 13:09:56  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:09:57  INFO        Page 5: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=5
+2026-03-11 13:09:58  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:00  INFO        Page 6: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=6
+2026-03-11 13:10:01  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:03  INFO        Page 7: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=7
+2026-03-11 13:10:04  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:05  INFO        Page 8: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=8
+2026-03-11 13:10:06  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:08  INFO        Page 9: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=9
+2026-03-11 13:10:09  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:11  INFO        Page 10: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=10
+2026-03-11 13:10:12  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 13:10:12  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 13:10:14  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-11 13:10:14  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-11 13:10:16  INFO        Found 24 | Qualified: 16 | New in DB: 0 | Lowest rating: 84.0%
+2026-03-11 13:10:16  INFO        Rating dropped to 84.0% — stopping early.
+2026-03-11 13:10:17  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-11 13:10:17  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-11 13:10:19  INFO        Found 24 | Qualified: 10 | New in DB: 0 | Lowest rating: 72.0%
+2026-03-11 13:10:19  INFO        Rating dropped to 72.0% — stopping early.
+2026-03-11 13:10:21  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-11 13:10:21  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-11 13:10:23  INFO        Found 24 | Qualified: 10 | New in DB: 0 | Lowest rating: 10.0%
+2026-03-11 13:10:23  INFO        Rating dropped to 10.0% — stopping early.
+2026-03-11 13:10:24  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-11 13:10:24  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-11 13:10:26  INFO        Found 24 | Qualified: 9 | New in DB: 1 | Lowest rating: 60.0%
+2026-03-11 13:10:26  INFO        Rating dropped to 60.0% — stopping early.
+2026-03-11 13:10:27  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-11 13:10:27  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-11 13:10:29  INFO        Found 24 | Qualified: 11 | New in DB: 0 | Lowest rating: 90.0%
+2026-03-11 13:10:30  INFO        Page 2: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating&f=2
+2026-03-11 13:10:32  INFO        Found 24 | Qualified: 12 | New in DB: 0 | Lowest rating: 55.0%
+2026-03-11 13:10:32  INFO        Rating dropped to 55.0% — stopping early.
+2026-03-11 13:10:33  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-11 13:10:33  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-11 13:10:34  WARNING    Request failed: HTTP Error 404: 
+2026-03-11 13:10:34  INFO        No products returned — stopping.
+2026-03-11 13:10:35  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-11 13:10:35  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-11 13:10:36  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:38  INFO        Page 2: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=2
+2026-03-11 13:10:39  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:40  INFO        Page 3: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=3
+2026-03-11 13:10:41  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:43  INFO        Page 4: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=4
+2026-03-11 13:10:44  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:45  INFO        Page 5: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=5
+2026-03-11 13:10:46  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:48  INFO        Page 6: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=6
+2026-03-11 13:10:49  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:50  INFO        Page 7: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=7
+2026-03-11 13:10:51  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:53  INFO        Page 8: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=8
+2026-03-11 13:10:54  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:55  INFO        Page 9: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=9
+2026-03-11 13:10:56  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:58  INFO        Page 10: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=10
+2026-03-11 13:10:59  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 13:10:59  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 13:11:00  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-11 13:11:00  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-11 13:11:02  INFO        Found 24 | Qualified: 15 | New in DB: 0 | Lowest rating: 82.0%
+2026-03-11 13:11:02  INFO        Rating dropped to 82.0% — stopping early.
+2026-03-11 13:11:04  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-11 13:11:04  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-11 13:11:05  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:06  INFO        Page 2: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=2
+2026-03-11 13:11:08  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:10  INFO        Page 3: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=3
+2026-03-11 13:11:11  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:13  INFO        Page 4: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=4
+2026-03-11 13:11:14  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:15  INFO        Page 5: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=5
+2026-03-11 13:11:17  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:18  INFO        Page 6: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=6
+2026-03-11 13:11:19  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:21  INFO        Page 7: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=7
+2026-03-11 13:11:22  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:24  INFO        Page 8: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=8
+2026-03-11 13:11:27  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:28  INFO        Page 9: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=9
+2026-03-11 13:11:30  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:31  INFO        Page 10: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=10
+2026-03-11 13:11:32  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 13:11:32  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 13:11:34  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-11 13:11:34  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-11 13:11:35  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 82.0%
+2026-03-11 13:11:35  INFO        Rating dropped to 82.0% — stopping early.
+2026-03-11 13:11:37  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-11 13:11:37  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-11 13:11:40  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 65.0%
+2026-03-11 13:11:40  INFO        Rating dropped to 65.0% — stopping early.
+2026-03-11 13:11:42  INFO     ============================================================
+2026-03-11 13:11:42  INFO     Run complete — 1 new products added across 14 categories.
+2026-03-11 13:11:42  INFO     ============================================================
+2026-03-11 22:35:56  INFO     ============================================================
+2026-03-11 22:35:56  INFO     QualityDB Heureka Scraper — starting run
+2026-03-11 22:35:56  INFO     ============================================================
+2026-03-11 22:35:56  INFO     Warming up session (visiting homepage)…
+2026-03-11 22:35:56  INFO     Session ready. Cookies obtained: 6
+2026-03-11 22:35:59  INFO     ── TVs  (https://televize.heureka.cz)
+2026-03-11 22:35:59  INFO        Page 1: https://televize.heureka.cz/?sort=rating
+2026-03-11 22:35:59  INFO        Found 24 | Qualified: 12 | New in DB: 12 | Lowest rating: 77.0%
+2026-03-11 22:35:59  INFO        Rating dropped to 77.0% — stopping early.
+2026-03-11 22:36:01  INFO     ── Headphones  (https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka)
+2026-03-11 22:36:01  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/sluchatka/?sort=rating
+2026-03-11 22:36:02  INFO        Found 5 | Qualified: 0 | New in DB: 0 | Lowest rating: 84.0%
+2026-03-11 22:36:02  INFO        Rating dropped to 84.0% — stopping early.
+2026-03-11 22:36:03  INFO     ── Speakers  (https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory)
+2026-03-11 22:36:03  INFO        Page 1: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating
+2026-03-11 22:36:04  INFO        Found 24 | Qualified: 14 | New in DB: 11 | Lowest rating: 86.0%
+2026-03-11 22:36:06  INFO        Page 2: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=2
+2026-03-11 22:36:07  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:08  INFO        Page 3: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=3
+2026-03-11 22:36:09  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:11  INFO        Page 4: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=4
+2026-03-11 22:36:12  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:13  INFO        Page 5: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=5
+2026-03-11 22:36:14  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:16  INFO        Page 6: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=6
+2026-03-11 22:36:17  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:18  INFO        Page 7: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=7
+2026-03-11 22:36:19  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:21  INFO        Page 8: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=8
+2026-03-11 22:36:22  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:23  INFO        Page 9: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=9
+2026-03-11 22:36:25  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:26  INFO        Page 10: https://sluchatka-reproduktory-handsfree.heureka.cz/reproduktory/?sort=rating&f=10
+2026-03-11 22:36:27  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 86.0%
+2026-03-11 22:36:27  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 22:36:29  INFO     ── Mice  (https://pocitace-notebooky.heureka.cz/mysi)
+2026-03-11 22:36:29  INFO        Page 1: https://pocitace-notebooky.heureka.cz/mysi/?sort=rating
+2026-03-11 22:36:30  INFO        Found 24 | Qualified: 17 | New in DB: 15 | Lowest rating: 84.0%
+2026-03-11 22:36:30  INFO        Rating dropped to 84.0% — stopping early.
+2026-03-11 22:36:32  INFO     ── Keyboards  (https://pocitace-notebooky.heureka.cz/klavesnice)
+2026-03-11 22:36:32  INFO        Page 1: https://pocitace-notebooky.heureka.cz/klavesnice/?sort=rating
+2026-03-11 22:36:33  INFO        Found 24 | Qualified: 10 | New in DB: 10 | Lowest rating: 72.0%
+2026-03-11 22:36:33  INFO        Rating dropped to 72.0% — stopping early.
+2026-03-11 22:36:35  INFO     ── Laptop Accessories  (https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum)
+2026-03-11 22:36:35  INFO        Page 1: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating
+2026-03-11 22:36:37  INFO        Found 24 | Qualified: 9 | New in DB: 9 | Lowest rating: 85.0%
+2026-03-11 22:36:38  INFO        Page 2: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=2
+2026-03-11 22:36:39  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:41  INFO        Page 3: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=3
+2026-03-11 22:36:42  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:44  INFO        Page 4: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=4
+2026-03-11 22:36:45  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:46  INFO        Page 5: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=5
+2026-03-11 22:36:47  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:49  INFO        Page 6: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=6
+2026-03-11 22:36:51  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:52  INFO        Page 7: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=7
+2026-03-11 22:36:54  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:55  INFO        Page 8: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=8
+2026-03-11 22:36:56  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:36:58  INFO        Page 9: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=9
+2026-03-11 22:36:59  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:37:00  INFO        Page 10: https://pocitace-notebooky.heureka.cz/prislusenstvi-k-notebookum/?sort=rating&f=10
+2026-03-11 22:37:01  INFO        Found 24 | Qualified: 9 | New in DB: 0 | Lowest rating: 85.0%
+2026-03-11 22:37:01  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 22:37:03  INFO     ── SSD  (https://pocitace-notebooky.heureka.cz/ssd-disky)
+2026-03-11 22:37:03  INFO        Page 1: https://pocitace-notebooky.heureka.cz/ssd-disky/?sort=rating
+2026-03-11 22:37:04  INFO        Found 24 | Qualified: 7 | New in DB: 7 | Lowest rating: 60.0%
+2026-03-11 22:37:04  INFO        Rating dropped to 60.0% — stopping early.
+2026-03-11 22:37:06  INFO     ── RAM  (https://pocitace-notebooky.heureka.cz/operacni-pameti)
+2026-03-11 22:37:06  INFO        Page 1: https://pocitace-notebooky.heureka.cz/operacni-pameti/?sort=rating
+2026-03-11 22:37:08  INFO        Found 24 | Qualified: 10 | New in DB: 10 | Lowest rating: 55.0%
+2026-03-11 22:37:08  INFO        Rating dropped to 55.0% — stopping early.
+2026-03-11 22:37:09  INFO     ── Smartwatches  (https://chytre-hodinky-a-fitness-naramky.heureka.cz)
+2026-03-11 22:37:09  INFO        Page 1: https://chytre-hodinky-a-fitness-naramky.heureka.cz/?sort=rating
+2026-03-11 22:37:09  WARNING    Request failed: HTTP Error 404: 
+2026-03-11 22:37:09  INFO        No products returned — stopping.
+2026-03-11 22:37:11  INFO     ── Kitchen Appliances  (https://bile-zbozi.heureka.cz/male-spotrebice)
+2026-03-11 22:37:11  INFO        Page 1: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating
+2026-03-11 22:37:12  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:13  INFO        Page 2: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=2
+2026-03-11 22:37:14  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:16  INFO        Page 3: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=3
+2026-03-11 22:37:17  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:18  INFO        Page 4: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=4
+2026-03-11 22:37:19  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:21  INFO        Page 5: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=5
+2026-03-11 22:37:22  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:24  INFO        Page 6: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=6
+2026-03-11 22:37:25  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:27  INFO        Page 7: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=7
+2026-03-11 22:37:28  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:29  INFO        Page 8: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=8
+2026-03-11 22:37:30  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:32  INFO        Page 9: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=9
+2026-03-11 22:37:32  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:34  INFO        Page 10: https://bile-zbozi.heureka.cz/male-spotrebice/?sort=rating&f=10
+2026-03-11 22:37:34  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 96.0%
+2026-03-11 22:37:34  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 22:37:36  INFO     ── Vacuum Cleaners  (https://bile-zbozi.heureka.cz/vysavace)
+2026-03-11 22:37:36  INFO        Page 1: https://bile-zbozi.heureka.cz/vysavace/?sort=rating
+2026-03-11 22:37:39  INFO        Found 24 | Qualified: 14 | New in DB: 14 | Lowest rating: 82.0%
+2026-03-11 22:37:39  INFO        Rating dropped to 82.0% — stopping early.
+2026-03-11 22:37:40  INFO     ── Coffee Machines  (https://bile-zbozi.heureka.cz/kavovary)
+2026-03-11 22:37:40  INFO        Page 1: https://bile-zbozi.heureka.cz/kavovary/?sort=rating
+2026-03-11 22:37:43  INFO        Found 24 | Qualified: 14 | New in DB: 14 | Lowest rating: 87.0%
+2026-03-11 22:37:45  INFO        Page 2: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=2
+2026-03-11 22:37:47  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:37:48  INFO        Page 3: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=3
+2026-03-11 22:37:50  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:37:52  INFO        Page 4: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=4
+2026-03-11 22:37:53  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:37:55  INFO        Page 5: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=5
+2026-03-11 22:37:56  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:37:57  INFO        Page 6: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=6
+2026-03-11 22:38:00  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:38:01  INFO        Page 7: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=7
+2026-03-11 22:38:03  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:38:04  INFO        Page 8: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=8
+2026-03-11 22:38:06  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:38:07  INFO        Page 9: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=9
+2026-03-11 22:38:08  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:38:10  INFO        Page 10: https://bile-zbozi.heureka.cz/kavovary/?sort=rating&f=10
+2026-03-11 22:38:11  INFO        Found 24 | Qualified: 14 | New in DB: 0 | Lowest rating: 87.0%
+2026-03-11 22:38:11  INFO        Reached MAX_PAGES=10 limit.
+2026-03-11 22:38:13  INFO     ── Air Purifiers  (https://bile-zbozi.heureka.cz/cisticky-vzduchu)
+2026-03-11 22:38:13  INFO        Page 1: https://bile-zbozi.heureka.cz/cisticky-vzduchu/?sort=rating
+2026-03-11 22:38:14  INFO        Found 24 | Qualified: 9 | New in DB: 9 | Lowest rating: 82.0%
+2026-03-11 22:38:14  INFO        Rating dropped to 82.0% — stopping early.
+2026-03-11 22:38:16  INFO     ── Cables & Hubs  (https://pocitace-notebooky.heureka.cz/kabely-redukce)
+2026-03-11 22:38:16  INFO        Page 1: https://pocitace-notebooky.heureka.cz/kabely-redukce/?sort=rating
+2026-03-11 22:38:17  INFO        Found 24 | Qualified: 0 | New in DB: 0 | Lowest rating: 65.0%
+2026-03-11 22:38:17  INFO        Rating dropped to 65.0% — stopping early.
+2026-03-11 22:38:18  INFO     ============================================================
+2026-03-11 22:38:18  INFO     Run complete — 111 new products added across 14 categories.
+2026-03-11 22:38:18  INFO     ============================================================
