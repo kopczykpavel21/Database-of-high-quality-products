@@ -97,6 +97,24 @@ def get_categories():
     return rows
 
 
+def query_keywords():
+    """Return all distinct keyword tags with their product counts, sorted by count."""
+    import json as _json
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT keywords FROM products WHERE keywords IS NOT NULL"
+    ).fetchall()
+    conn.close()
+    counts = {}
+    for (kw_json,) in rows:
+        try:
+            for tag in _json.loads(kw_json):
+                counts[tag] = counts.get(tag, 0) + 1
+        except Exception:
+            pass
+    return sorted(counts.items(), key=lambda x: -x[1])
+
+
 def build_html():
     with open(TMPL, encoding="utf-8") as f:
         html = f.read()
@@ -123,6 +141,7 @@ def query_products(params):
     order       = params.get("order", ["asc"])[0]
     page        = int(params.get("page", ["1"])[0])
     source      = params.get("source", [""])[0]
+    keyword     = params.get("keyword", [""])[0]
 
     allowed_sort = {"ReturnRate_pct","AvgStarRating","ReviewsCount",
                     "RecommendRate_pct","Price_CZK","Name"}
@@ -139,13 +158,15 @@ def query_products(params):
     if min_stars:
         conditions.append("AvgStarRating >= ?"); plist.append(float(min_stars))
     if max_return:
-        conditions.append("ReturnRate_pct <= ?"); plist.append(float(max_return))
+        conditions.append("(ReturnRate_pct <= ? OR ReturnRate_pct IS NULL)"); plist.append(float(max_return))
     if min_reviews:
         conditions.append("ReviewsCount >= ?"); plist.append(int(min_reviews))
     if min_rec:
         conditions.append("RecommendRate_pct >= ?"); plist.append(float(min_rec))
     if source:
         conditions.append("source = ?"); plist.append(source)
+    if keyword:
+        conditions.append('keywords LIKE ?'); plist.append(f'%"{keyword}"%')
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
     null_last = f"CASE WHEN {sort_by} IS NULL THEN 1 ELSE 0 END"
@@ -159,8 +180,10 @@ def query_products(params):
               SELECT *,
                 RANK() OVER (
                   PARTITION BY source
-                  ORDER BY COALESCE(RecommendRate_pct, 0) DESC,
-                           COALESCE(ReviewsCount, 0) DESC
+                  ORDER BY (
+                    COALESCE(RecommendRate_pct, 0) * COALESCE(ReviewsCount, 0)
+                    / (COALESCE(ReviewsCount, 0) + 50.0)
+                  ) DESC
                 ) AS source_rank,
                 COUNT(*) OVER (PARTITION BY source) AS source_total
               FROM products
@@ -170,7 +193,7 @@ def query_products(params):
                    RecommendRate_pct, ReturnRate_pct,
                    Stars5_Count, Stars4_Count, Stars3_Count,
                    Stars2_Count, Stars1_Count, source,
-                   source_rank, source_total
+                   source_rank, source_total, keywords
             FROM ranked {where}
             ORDER BY {null_last}, {sort_by} {order_sql}
             LIMIT ? OFFSET ?""",
@@ -236,6 +259,9 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/stats":
             self.send_json(query_stats())
+
+        elif path == "/api/keywords":
+            self.send_json([{"tag": t, "count": c} for t, c in query_keywords()])
 
         elif path == "/api/scrape-status":
             with _scraper_lock:
