@@ -1,15 +1,97 @@
 """
 QualityDB – Standalone HTTP server (no external dependencies).
 Run: python3 server.py
-Then open: http://localhost:5000
+Then open: http://localhost:8080
+
+Automatic scraping:
+    On startup, a background thread waits 60 s then runs both scrapers once.
+    After that it runs them again every 24 hours.
+    Visit /api/scrape-status to see last run info.
+    Visit /api/run-scraper  to trigger a manual run immediately.
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import sqlite3, json, os, math, urllib.parse, mimetypes
+import threading, time, datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "products.db")
 STATIC  = os.path.join(os.path.dirname(__file__), "static")
 TMPL    = os.path.join(os.path.dirname(__file__), "templates", "index.html")
 PAGE_SIZE = 24
+
+# ── Background scraper state ──────────────────────────────────────────────────
+_scraper_status = {
+    "running":    False,
+    "last_run":   None,   # ISO timestamp string
+    "last_added": 0,
+    "last_error": None,
+}
+_scraper_lock = threading.Lock()
+
+
+def _run_scrapers():
+    """Run Heureka + Amazon scrapers and update _scraper_status."""
+    with _scraper_lock:
+        if _scraper_status["running"]:
+            return   # already running, skip
+        _scraper_status["running"] = True
+        _scraper_status["last_error"] = None
+
+    total_added = 0
+    try:
+        import sys as _sys
+        _sys.path.insert(0, os.path.dirname(__file__))
+
+        try:
+            from scraper.heureka_scraper import run_scraper as run_heureka
+            result = run_heureka()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Heureka error: {e}")
+
+        try:
+            from scraper.mall_scraper import run_scraper as run_mall
+            result = run_mall()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Mall error: {e}")
+
+        try:
+            from scraper.zbozi_scraper import run_scraper as run_zbozi
+            result = run_zbozi()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Zbozi error: {e}")
+
+        try:
+            from scraper.amazon_scraper import run_scraper as run_amazon
+            result = run_amazon()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Amazon error: {e}")
+
+    except Exception as e:
+        with _scraper_lock:
+            _scraper_status["last_error"] = str(e)
+    finally:
+        with _scraper_lock:
+            _scraper_status["running"]    = False
+            _scraper_status["last_run"]   = datetime.datetime.utcnow().isoformat() + "Z"
+            _scraper_status["last_added"] = total_added
+        print(f"[scraper] Run complete — {total_added} new products added.")
+
+
+def _scraper_loop():
+    """
+    Background thread: wait 60 s after startup, run scrapers, then repeat every 24 h.
+    The 60-second delay lets the server finish starting before heavy work begins.
+    """
+    print("[scraper] Background scheduler started — first run in 60 s.")
+    time.sleep(60)
+    while True:
+        print("[scraper] Starting scheduled scrape run…")
+        _run_scrapers()
+        print("[scraper] Next run in 24 hours.")
+        time.sleep(24 * 60 * 60)
 
 
 def get_categories():
@@ -151,6 +233,20 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/stats":
             self.send_json(query_stats())
 
+        elif path == "/api/scrape-status":
+            with _scraper_lock:
+                self.send_json(dict(_scraper_status))
+
+        elif path == "/api/run-scraper":
+            with _scraper_lock:
+                already = _scraper_status["running"]
+            if already:
+                self.send_json({"status": "already_running"})
+            else:
+                t = threading.Thread(target=_run_scrapers, daemon=True)
+                t.start()
+                self.send_json({"status": "started"})
+
         elif path.startswith("/static/"):
             fname = path[len("/static/"):]
             fpath = os.path.join(STATIC, fname)
@@ -174,11 +270,16 @@ if __name__ == "__main__":
         print("Database not found. Run load_data.py first.")
         exit(1)
     # On Render/cloud the PORT env var is set automatically.
-    # Locally it defaults to 5000.
-    import os as _os
-    port = int(_os.environ.get("PORT", 8080))
+    # Locally it defaults to 8080.
+    port = int(os.environ.get("PORT", 8080))
     host = "0.0.0.0"   # listen on all interfaces (required for cloud hosting)
+
+    # Start background scraper scheduler (runs every 24 h, first run after 60 s)
+    bg = threading.Thread(target=_scraper_loop, daemon=True)
+    bg.start()
+
     server = HTTPServer((host, port), Handler)
     print(f"✦ QualityDB running at http://localhost:{port}")
+    print("  Background scraper scheduled — first run in 60 s.")
     print("  Press Ctrl+C to stop.")
     server.serve_forever()
