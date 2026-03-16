@@ -6,6 +6,7 @@ let currentPage = 1;
 let debounceTimer = null;
 let isListView = false;
 let activeKeyword = "";
+let categoriesTree = [];   // [{main, subs:[{sub,count}]}]
 
 const SOURCE_LABELS = { alza: "Alza.cz", heureka: "Heureka.cz", zbozi: "Zbozi.cz", amazon: "Amazon.de" };
 
@@ -23,6 +24,7 @@ function getFilters() {
 
   return {
     q: document.getElementById("search-input").value.trim(),
+    main_category: document.getElementById("filter-main-category").value,
     category: document.getElementById("filter-category").value,
     min_stars: starsVal > 0 ? starsVal : "",
     max_return: returnVal < 1.4 ? returnVal : "",
@@ -45,6 +47,38 @@ async function fetchProducts() {
   const res = await fetch(`/api/products?${params}`);
   const data = await res.json();
   renderProducts(data);
+}
+
+async function fetchCategories() {
+  const res = await fetch("/api/categories");
+  categoriesTree = await res.json();
+
+  const mainSel = document.getElementById("filter-main-category");
+  mainSel.innerHTML = '<option value="">All categories</option>' +
+    categoriesTree.map(({ main, subs }) => {
+      const total = subs.reduce((s, x) => s + x.count, 0);
+      return `<option value="${escHtml(main)}">${escHtml(main)} (${total.toLocaleString()})</option>`;
+    }).join("");
+}
+
+function populateSubcategories(mainValue) {
+  const subGroup = document.getElementById("sub-category-group");
+  const subSel   = document.getElementById("filter-category");
+
+  if (!mainValue) {
+    subGroup.style.display = "none";
+    subSel.innerHTML = '<option value="">All subcategories</option>';
+    return;
+  }
+
+  const entry = categoriesTree.find(e => e.main === mainValue);
+  if (!entry) { subGroup.style.display = "none"; return; }
+
+  subSel.innerHTML = '<option value="">All subcategories</option>' +
+    entry.subs.map(({ sub, count }) =>
+      `<option value="${escHtml(sub)}">${escHtml(sub)} (${count.toLocaleString()})</option>`
+    ).join("");
+  subGroup.style.display = "";
 }
 
 async function fetchKeywords() {
@@ -330,6 +364,7 @@ function debouncedSearch() {
 // ---- Event listeners ----
 document.addEventListener("DOMContentLoaded", () => {
   fetchStats();
+  fetchCategories();
   fetchKeywords();
   fetchProducts();
 
@@ -403,7 +438,8 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("reset-filters").addEventListener("click", () => {
     document.getElementById("search-input").value = "";
     document.getElementById("search-clear").style.display = "none";
-    document.getElementById("filter-category").value = "";
+    document.getElementById("filter-main-category").value = "";
+    populateSubcategories("");   // hides sub-dropdown and clears it
     document.getElementById("filter-source").value = "";
     activeKeyword = "";
     document.querySelectorAll(".kw-pill").forEach(b => b.classList.remove("active"));
@@ -461,6 +497,14 @@ document.addEventListener("DOMContentLoaded", () => {
     triggerSearch();
     if (window.innerWidth <= 900) closeSidebar();
   }
+
+  // Main category → populate subcategory dropdown, then search
+  document.getElementById("filter-main-category").addEventListener("change", function() {
+    populateSubcategories(this.value);
+    currentPage = 1;
+    triggerSearchAndClose();
+  });
+
   ["filter-category", "filter-source", "sort-by"].forEach(id => {
     document.getElementById(id).addEventListener("change", triggerSearchAndClose);
   });
