@@ -159,45 +159,63 @@ def scrape_page(url: str, session) -> list:
 
 # ── Database helpers ─────────────────────────────────────────────────────────
 
-def load_existing_names(conn: sqlite3.Connection) -> set:
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
-    return {r[0] for r in rows}
-
-
-def insert_products(conn: sqlite3.Connection, products: list, category: str) -> int:
-    existing = load_existing_names(conn)
+def upsert_products(conn: sqlite3.Connection, products: list, category: str) -> tuple:
+    """
+    Insert new products or refresh price/rating/reviews for existing ones.
+    Returns (inserted, updated) counts.
+    """
+    existing_urls = {r[0] for r in conn.execute("SELECT ProductURL FROM products WHERE ProductURL != ''").fetchall()}
     inserted = 0
+    updated  = 0
     for p in products:
-        key = p["Name"].lower()
-        if key in existing:
-            continue
-        conn.execute(
-            """INSERT INTO products
-               (Name, Category, ProductURL, Price_CZK,
-                RecommendRate_pct, ReviewsCount, source)
-               VALUES (?,?,?,?,?,?,?)""",
-            (
-                p["Name"],
-                category,
-                p.get("ProductURL", ""),
-                p.get("Price_CZK"),
-                p.get("RecommendRate_pct"),
-                p.get("ReviewsCount", 0),
-                "heureka",
+        url = p.get("ProductURL", "")
+        if url and url in existing_urls:
+            # Already in DB — refresh live data fields only
+            conn.execute(
+                """UPDATE products
+                   SET Price_CZK         = COALESCE(?, Price_CZK),
+                       RecommendRate_pct = COALESCE(?, RecommendRate_pct),
+                       ReviewsCount      = COALESCE(?, ReviewsCount)
+                   WHERE ProductURL = ?""",
+                (
+                    p.get("Price_CZK"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount") or None,
+                    url,
+                )
             )
-        )
-        existing.add(key)
-        inserted += 1
+            updated += 1
+        else:
+            # New product — insert
+            conn.execute(
+                """INSERT OR IGNORE INTO products
+                   (Name, Category, ProductURL, Price_CZK,
+                    RecommendRate_pct, ReviewsCount, source)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    p["Name"],
+                    category,
+                    url,
+                    p.get("Price_CZK"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount", 0),
+                    "heureka",
+                )
+            )
+            if url:
+                existing_urls.add(url)
+            inserted += 1
     conn.commit()
-    return inserted
+    return inserted, updated
 
 
 # ── Main scrape logic ────────────────────────────────────────────────────────
 
-def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> int:
-    base_url    = cat["url"].rstrip("/")
-    cat_name    = cat["name"]
-    total_added = 0
+def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> tuple:
+    base_url      = cat["url"].rstrip("/")
+    cat_name      = cat["name"]
+    total_added   = 0
+    total_updated = 0
 
     log.info(f"── {cat_name}  ({base_url})")
 
@@ -223,11 +241,12 @@ def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> int:
         rated = [p["RecommendRate_pct"] for p in products if p["RecommendRate_pct"] is not None]
         lowest_on_page = min(rated) if rated else 100
 
-        added = insert_products(conn, qualified, cat_name)
-        total_added += added
+        inserted, updated = upsert_products(conn, qualified, cat_name)
+        total_added   += inserted
+        total_updated += updated
         log.info(
             f"   Found {len(products)} | Qualified: {len(qualified)} | "
-            f"New in DB: {added} | Lowest rating: {lowest_on_page}%"
+            f"New: {inserted} | Updated: {updated} | Lowest rating: {lowest_on_page}%"
         )
 
         if lowest_on_page < STOP_BELOW_PCT:
@@ -241,7 +260,7 @@ def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> int:
         page += 1
         time.sleep(REQUEST_DELAY)
 
-    return total_added
+    return total_added, total_updated
 
 
 def run_scraper() -> dict:
@@ -259,12 +278,13 @@ def run_scraper() -> dict:
     time.sleep(REQUEST_DELAY)
 
     conn    = sqlite3.connect(DB_PATH)
-    summary = {"categories_scraped": 0, "total_added": 0, "errors": []}
+    summary = {"categories_scraped": 0, "total_added": 0, "total_updated": 0, "errors": []}
 
     for cat in CATEGORIES:
         try:
-            added = scrape_category(cat, session, conn)
+            added, updated = scrape_category(cat, session, conn)
             summary["total_added"]        += added
+            summary["total_updated"]      += updated
             summary["categories_scraped"] += 1
         except Exception as e:
             log.error(f"Error scraping {cat['name']}: {e}")
@@ -276,8 +296,8 @@ def run_scraper() -> dict:
 
     log.info("=" * 60)
     log.info(
-        f"Run complete — {summary['total_added']} new products added "
-        f"across {summary['categories_scraped']} categories."
+        f"Run complete — {summary['total_added']} new products added, "
+        f"{summary['total_updated']} updated across {summary['categories_scraped']} categories."
     )
     log.info("=" * 60)
     return summary
@@ -287,4 +307,4 @@ if __name__ == "__main__":
     result = run_scraper()
     if result.get("errors"):
         print(f"\n⚠  {len(result['errors'])} category error(s) — check scraper/scraper.log")
-    print(f"\n✓  Done. {result['total_added']} new products added to database.")
+    print(f"\n✓  Done. {result['total_added']} new | {result.get('total_updated', 0)} updated.")

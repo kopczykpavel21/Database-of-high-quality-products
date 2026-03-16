@@ -113,59 +113,88 @@ def warm_up_session(session) -> bool:
 def fetch_page(slug: str, offset: int, session) -> dict:
     """
     Call the Zbozi JSON API for one page of products.
-    Returns the parsed JSON dict, or empty dict on error.
+    Retries up to 3 times with a session re-warm on empty/failed responses.
+    Returns the parsed JSON dict, or empty dict on persistent failure.
     """
     url = f"{API_BASE}?categoryPath={slug}&limit={PAGE_SIZE}&offset={offset}"
-    try:
-        resp = session.get(url, headers=EXTRA_HEADERS, timeout=20)
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        log.warning(f"  API request failed: {e}")
-        return {}
+    for attempt in range(3):
+        try:
+            resp = session.get(url, headers=EXTRA_HEADERS, timeout=20)
+            resp.raise_for_status()
+            text = resp.text.strip()
+            if not text:
+                log.warning(f"  Empty response (attempt {attempt + 1}/3) — re-warming session…")
+                time.sleep(3 + attempt * 2)
+                warm_up_session(session)
+                continue
+            return resp.json()
+        except json.JSONDecodeError:
+            log.warning(f"  Invalid JSON (attempt {attempt + 1}/3) — re-warming session…")
+            time.sleep(3 + attempt * 2)
+            warm_up_session(session)
+        except Exception as e:
+            log.warning(f"  API request failed (attempt {attempt + 1}/3): {e}")
+            time.sleep(2 + attempt * 2)
+    return {}
 
 
 # ── Database helpers ──────────────────────────────────────────────────────────
 
-def load_existing_names(conn):
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
-    return {r[0] for r in rows}
-
-
-def insert_products(conn, products, category):
-    existing = load_existing_names(conn)
+def upsert_products(conn, products, category):
+    """
+    Insert new products or refresh price/rating/reviews for existing ones.
+    Returns (inserted, updated) counts.
+    """
+    existing_urls = {r[0] for r in conn.execute("SELECT ProductURL FROM products WHERE ProductURL != ''").fetchall()}
     inserted = 0
+    updated  = 0
     for p in products:
-        key = p["Name"].lower()
-        if key in existing:
-            continue
-        conn.execute(
-            """INSERT INTO products
-               (Name, Category, ProductURL, Price_CZK,
-                RecommendRate_pct, ReviewsCount, source)
-               VALUES (?,?,?,?,?,?,?)""",
-            (
-                p["Name"],
-                category,
-                p.get("ProductURL", ""),
-                p.get("Price_CZK"),
-                p.get("RecommendRate_pct"),
-                p.get("ReviewsCount", 0),
-                "zbozi",
+        url = p.get("ProductURL", "")
+        if url and url in existing_urls:
+            conn.execute(
+                """UPDATE products
+                   SET Price_CZK         = COALESCE(?, Price_CZK),
+                       RecommendRate_pct = COALESCE(?, RecommendRate_pct),
+                       ReviewsCount      = COALESCE(?, ReviewsCount)
+                   WHERE ProductURL = ?""",
+                (
+                    p.get("Price_CZK"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount") or None,
+                    url,
+                )
             )
-        )
-        existing.add(key)
-        inserted += 1
+            updated += 1
+        else:
+            conn.execute(
+                """INSERT OR IGNORE INTO products
+                   (Name, Category, ProductURL, Price_CZK,
+                    RecommendRate_pct, ReviewsCount, source)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    p["Name"],
+                    category,
+                    url,
+                    p.get("Price_CZK"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount", 0),
+                    "zbozi",
+                )
+            )
+            if url:
+                existing_urls.add(url)
+            inserted += 1
     conn.commit()
-    return inserted
+    return inserted, updated
 
 
 # ── Main scrape logic ─────────────────────────────────────────────────────────
 
 def scrape_category(cat, session, conn):
-    slug     = cat["slug"]
-    cat_name = cat["name"]
-    total_added = 0
+    slug          = cat["slug"]
+    cat_name      = cat["name"]
+    total_added   = 0
+    total_updated = 0
 
     log.info(f"── {cat_name}  ({slug})")
 
@@ -208,11 +237,12 @@ def scrape_category(cat, session, conn):
         rated = [p["RecommendRate_pct"] for p in products if p["RecommendRate_pct"] > 0]
         lowest = min(rated) if rated else 100.0
 
-        added = insert_products(conn, qualified, cat_name)
-        total_added += added
+        inserted, updated = upsert_products(conn, qualified, cat_name)
+        total_added   += inserted
+        total_updated += updated
         log.info(
             f"   Found {len(products)} | Qualified: {len(qualified)} | "
-            f"New: {added} | Lowest rating: {lowest:.0f}%"
+            f"New: {inserted} | Updated: {updated} | Lowest rating: {lowest:.0f}%"
         )
 
         # Stop if we've seen all products or quality drops
@@ -226,7 +256,7 @@ def scrape_category(cat, session, conn):
 
         time.sleep(REQUEST_DELAY)
 
-    return total_added
+    return total_added, total_updated
 
 
 def run_scraper():
@@ -243,12 +273,13 @@ def run_scraper():
     time.sleep(REQUEST_DELAY)
 
     conn    = sqlite3.connect(DB_PATH)
-    summary = {"categories_scraped": 0, "total_added": 0, "errors": []}
+    summary = {"categories_scraped": 0, "total_added": 0, "total_updated": 0, "errors": []}
 
     for cat in CATEGORIES:
         try:
-            added = scrape_category(cat, session, conn)
+            added, updated = scrape_category(cat, session, conn)
             summary["total_added"]        += added
+            summary["total_updated"]      += updated
             summary["categories_scraped"] += 1
         except Exception as e:
             log.error(f"Error scraping {cat['name']}: {e}")
@@ -259,7 +290,10 @@ def run_scraper():
     session.close()
 
     log.info("=" * 60)
-    log.info(f"Run complete — {summary['total_added']} new products added across {summary['categories_scraped']} categories.")
+    log.info(
+        f"Run complete — {summary['total_added']} new products added, "
+        f"{summary['total_updated']} updated across {summary['categories_scraped']} categories."
+    )
     log.info("=" * 60)
     return summary
 
@@ -268,4 +302,4 @@ if __name__ == "__main__":
     result = run_scraper()
     if result.get("errors"):
         print(f"\n⚠  {len(result['errors'])} category error(s) — check scraper/zbozi_scraper.log")
-    print(f"\n✓  Done. {result['total_added']} new products added to database.")
+    print(f"\n✓  Done. {result['total_added']} new | {result.get('total_updated', 0)} updated.")

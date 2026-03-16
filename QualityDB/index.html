@@ -56,14 +56,21 @@
       </div>
     </div>
 
-    <!-- Category -->
+    <!-- Main Category -->
     <div class="filter-group">
       <label class="filter-label">Category</label>
-      <select id="filter-category" class="filter-select">
+      <select id="filter-main-category" class="filter-select">
         <option value="">All categories</option>
-        {% for row in categories %}
-        <option value="{{ row.Category }}">{{ row.Category }} ({{ row.cnt }})</option>
-        {% endfor %}
+        <!-- populated by JS via /api/categories -->
+      </select>
+    </div>
+
+    <!-- Subcategory (shown only when a main category is selected) -->
+    <div class="filter-group" id="sub-category-group" style="display:none;">
+      <label class="filter-label">Subcategory</label>
+      <select id="filter-category" class="filter-select">
+        <option value="">All subcategories</option>
+        <!-- populated by JS based on main category selection -->
       </select>
     </div>
 
@@ -123,6 +130,14 @@
         <option value="zbozi">Zbozi.cz</option>
         <option value="amazon">Amazon.de</option>
       </select>
+    </div>
+
+    <!-- Quality keywords -->
+    <div class="filter-group">
+      <label class="filter-label">Quality signals</label>
+      <div class="kw-filter-pills" id="kw-filter-pills">
+        <!-- populated by JS -->
+      </div>
     </div>
   </aside>
 

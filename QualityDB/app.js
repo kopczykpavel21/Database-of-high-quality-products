@@ -5,6 +5,8 @@
 let currentPage = 1;
 let debounceTimer = null;
 let isListView = false;
+let activeKeyword = "";
+let categoriesTree = [];   // [{main, subs:[{sub,count}]}]
 
 const SOURCE_LABELS = { alza: "Alza.cz", heureka: "Heureka.cz", zbozi: "Zbozi.cz", amazon: "Amazon.de" };
 
@@ -22,6 +24,7 @@ function getFilters() {
 
   return {
     q: document.getElementById("search-input").value.trim(),
+    main_category: document.getElementById("filter-main-category").value,
     category: document.getElementById("filter-category").value,
     min_stars: starsVal > 0 ? starsVal : "",
     max_return: returnVal < 1.4 ? returnVal : "",
@@ -30,6 +33,7 @@ function getFilters() {
     sort: sortField,
     order: sortDir,
     source: document.getElementById("filter-source").value,
+    keyword: activeKeyword,
     page: currentPage
   };
 }
@@ -43,6 +47,68 @@ async function fetchProducts() {
   const res = await fetch(`/api/products?${params}`);
   const data = await res.json();
   renderProducts(data);
+}
+
+async function fetchCategories() {
+  const res = await fetch("/api/categories");
+  categoriesTree = await res.json();
+
+  const mainSel = document.getElementById("filter-main-category");
+  mainSel.innerHTML = '<option value="">All categories</option>' +
+    categoriesTree.map(({ main, subs }) => {
+      const total = subs.reduce((s, x) => s + x.count, 0);
+      return `<option value="${escHtml(main)}">${escHtml(main)} (${total.toLocaleString()})</option>`;
+    }).join("");
+}
+
+function populateSubcategories(mainValue) {
+  const subGroup = document.getElementById("sub-category-group");
+  const subSel   = document.getElementById("filter-category");
+
+  if (!mainValue) {
+    subGroup.style.display = "none";
+    subSel.innerHTML = '<option value="">All subcategories</option>';
+    return;
+  }
+
+  const entry = categoriesTree.find(e => e.main === mainValue);
+  if (!entry) { subGroup.style.display = "none"; return; }
+
+  subSel.innerHTML = '<option value="">All subcategories</option>' +
+    entry.subs.map(({ sub, count }) =>
+      `<option value="${escHtml(sub)}">${escHtml(sub)} (${count.toLocaleString()})</option>`
+    ).join("");
+  subGroup.style.display = "";
+}
+
+async function fetchKeywords() {
+  const res = await fetch("/api/keywords");
+  const data = await res.json();
+  const container = document.getElementById("kw-filter-pills");
+  if (!container) return;
+  // Show top 20 keywords as clickable pills
+  container.innerHTML = data.slice(0, 20).map(({ tag, count }) =>
+    `<button class="kw-pill" data-kw="${escHtml(tag)}" title="${count} products">
+       ${escHtml(tag)} <span class="kw-pill-count">${count}</span>
+     </button>`
+  ).join("");
+  container.querySelectorAll(".kw-pill").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const kw = btn.dataset.kw;
+      if (activeKeyword === kw) {
+        // deselect
+        activeKeyword = "";
+        btn.classList.remove("active");
+      } else {
+        activeKeyword = kw;
+        container.querySelectorAll(".kw-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      }
+      currentPage = 1;
+      fetchProducts();
+      if (window.innerWidth <= 900) closeSidebar();
+    });
+  });
 }
 
 async function fetchStats() {
@@ -105,6 +171,11 @@ function renderCard(p) {
         <div class="metric-value ${rankClass}">${rankDisplay}</div>
        </div>`;
 
+  const keywords = p.keywords ? JSON.parse(p.keywords) : [];
+  const cardTags = keywords.slice(0, 2).map(k =>
+    `<span class="kw-tag">${escHtml(k)}</span>`
+  ).join("");
+
   return `
   <div class="product-card" onclick="openModal(${JSON.stringify(JSON.stringify(p))})">
     ${sourceBadge}
@@ -117,6 +188,7 @@ function renderCard(p) {
         <div class="metric-value ${recommendClass(p.RecommendRate_pct)}">${recommendDisplay}</div>
       </div>
     </div>
+    ${cardTags ? `<div class="card-tags">${cardTags}</div>` : ""}
     <div class="card-stars">
       <span class="stars-visual">${starsVisual(p.AvgStarRating)}</span>
       <span>${starsDisplay}</span>
@@ -254,6 +326,14 @@ function openModal(jsonStr) {
 
     ${p.Description ? `<div class="modal-desc">${escHtml(p.Description).substring(0, 500)}${p.Description.length > 500 ? "…" : ""}</div>` : ""}
 
+    ${keywords.length > 0 ? `
+    <div class="modal-keywords">
+      <div class="modal-keywords-label">Quality signals</div>
+      <div class="modal-keywords-tags">
+        ${keywords.map(k => `<span class="kw-tag kw-tag-modal">${escHtml(k)}</span>`).join("")}
+      </div>
+    </div>` : ""}
+
     <div class="modal-actions">
       ${p.ProductURL ? `<a class="btn-primary" href="${escHtml(p.ProductURL)}" target="_blank">View on ${SOURCE_LABELS[p.source] || "Shop"} →</a>` : ""}
       <button class="btn-secondary" onclick="closeModal()">Close</button>
@@ -284,6 +364,8 @@ function debouncedSearch() {
 // ---- Event listeners ----
 document.addEventListener("DOMContentLoaded", () => {
   fetchStats();
+  fetchCategories();
+  fetchKeywords();
   fetchProducts();
 
   // Search
@@ -356,8 +438,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("reset-filters").addEventListener("click", () => {
     document.getElementById("search-input").value = "";
     document.getElementById("search-clear").style.display = "none";
-    document.getElementById("filter-category").value = "";
+    document.getElementById("filter-main-category").value = "";
+    populateSubcategories("");   // hides sub-dropdown and clears it
     document.getElementById("filter-source").value = "";
+    activeKeyword = "";
+    document.querySelectorAll(".kw-pill").forEach(b => b.classList.remove("active"));
     document.getElementById("sort-by").value = "ReturnRate_pct";
     starSlider.value = 0; document.getElementById("stars-val").textContent = "Any";
     returnSlider.value = 1.4; document.getElementById("return-val").textContent = "1.4%";
@@ -412,6 +497,14 @@ document.addEventListener("DOMContentLoaded", () => {
     triggerSearch();
     if (window.innerWidth <= 900) closeSidebar();
   }
+
+  // Main category → populate subcategory dropdown, then search
+  document.getElementById("filter-main-category").addEventListener("change", function() {
+    populateSubcategories(this.value);
+    currentPage = 1;
+    triggerSearchAndClose();
+  });
+
   ["filter-category", "filter-source", "sort-by"].forEach(id => {
     document.getElementById(id).addEventListener("change", triggerSearchAndClose);
   });

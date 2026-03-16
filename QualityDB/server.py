@@ -104,6 +104,40 @@ def get_categories():
     return rows
 
 
+def get_categories_hierarchical():
+    """Return list of {main, subs: [{sub, count}]} sorted by main name.
+    Falls back to a flat Category-based list if MainCategory column is missing."""
+    from collections import OrderedDict
+    conn = sqlite3.connect(DB_PATH)
+
+    # Check whether MainCategory column exists
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
+    has_main = "MainCategory" in cols
+
+    if has_main:
+        rows = conn.execute(
+            "SELECT COALESCE(MainCategory,'Ostatní') as main, Category, COUNT(*) as cnt "
+            "FROM products GROUP BY main, Category ORDER BY main, cnt DESC"
+        ).fetchall()
+    else:
+        # Fallback: treat every Category as its own "main" group
+        logging.warning(
+            "MainCategory column missing — run `python3 restructure_categories.py` "
+            "to enable two-level category filtering."
+        )
+        rows = conn.execute(
+            "SELECT COALESCE(Category,'Ostatní') as main, Category, COUNT(*) as cnt "
+            "FROM products GROUP BY Category ORDER BY cnt DESC"
+        ).fetchall()
+
+    conn.close()
+    tree = OrderedDict()
+    for main, sub, cnt in rows:
+        tree.setdefault(main, []).append({"sub": sub or "Nezařazeno", "count": cnt})
+    ordered = sorted(tree.keys(), key=lambda x: ("zzz" if x == "Ostatní" else x))
+    return [{"main": m, "subs": tree[m]} for m in ordered]
+
+
 def query_keywords():
     """Return all distinct keyword tags with their product counts, sorted by count."""
     import json as _json
@@ -124,23 +158,14 @@ def query_keywords():
 
 def build_html():
     with open(TMPL, encoding="utf-8") as f:
-        html = f.read()
-    cats_html = "\n".join(
-        f'<option value="{c[0]}">{c[0]} ({c[1]})</option>'
-        for c in get_categories()
-    )
-    return html.replace(
-        "{% for row in categories %}\n"
-        "        <option value=\"{{ row.Category }}\">{{ row.Category }} ({{ row.cnt }})</option>\n"
-        "        {% endfor %}",
-        cats_html
-    )
+        return f.read()
 
 
 def query_products(params):
-    q           = params.get("q", [""])[0].strip()
-    category    = params.get("category", [""])[0]
-    min_stars   = params.get("min_stars", [""])[0]
+    q            = params.get("q", [""])[0].strip()
+    main_category = params.get("main_category", [""])[0]
+    category     = params.get("category", [""])[0]
+    min_stars    = params.get("min_stars", [""])[0]
     max_return  = params.get("max_return", [""])[0]
     min_reviews = params.get("min_reviews", [""])[0]
     min_rec     = params.get("min_recommend", [""])[0]
@@ -160,6 +185,8 @@ def query_products(params):
     if q:
         conditions.append("(Name LIKE ? OR Category LIKE ? OR Description LIKE ?)")
         plist += [f"%{q}%", f"%{q}%", f"%{q}%"]
+    if main_category:
+        conditions.append("MainCategory = ?"); plist.append(main_category)
     if category:
         conditions.append("Category = ?"); plist.append(category)
     if min_stars:
@@ -195,7 +222,7 @@ def query_products(params):
                 COUNT(*) OVER (PARTITION BY source) AS source_total
               FROM products
             )
-            SELECT id, Name, Category, ProductURL, Price_CZK,
+            SELECT id, Name, MainCategory, Category, ProductURL, Price_CZK,
                    AvgStarRating, StarRatingsCount, ReviewsCount,
                    RecommendRate_pct, ReturnRate_pct,
                    Stars5_Count, Stars4_Count, Stars3_Count,
@@ -263,6 +290,13 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/products":
             self.send_json(query_products(params))
+
+        elif path == "/api/categories":
+            try:
+                self.send_json(get_categories_hierarchical())
+            except Exception as e:
+                logging.error(f"/api/categories failed: {e}")
+                self.send_json([])
 
         elif path == "/api/stats":
             self.send_json(query_stats())
