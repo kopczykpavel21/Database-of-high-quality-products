@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quality Product Database</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">✦</span>
+      <span class="logo-text">QualityDB</span>
+    </div>
+    <div class="header-center">
+      <div class="lang-toggle">
+        <button class="lang-btn active" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="cz">CZ</button>
+      </div>
+    </div>
+    <div class="header-stats" id="header-stats">
+      <span class="stat-pill"><span id="stat-total">—</span> <span data-i18n="statProducts">products</span></span>
+      <span class="stat-pill">⭐ <span id="stat-stars">—</span> <span data-i18n="statAvg">avg</span></span>
+    </div>
+  </div>
+</header>
+
+<!-- SEARCH BAR -->
+<div class="search-section">
+  <div class="search-wrap">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" data-i18n-placeholder="searchPlaceholder"
+             placeholder="Search products, brands, descriptions…" autocomplete="off" />
+      <button class="search-clear" id="search-clear" title="Clear">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE FILTER TOGGLE -->
+<button class="mobile-filter-btn" id="mobile-filter-btn">
+  <span>⚙</span> <span data-i18n="mobileFilters">Filters</span>
+</button>
+
+<!-- SIDEBAR BACKDROP (mobile) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR FILTERS -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2 data-i18n="filtersTitle">Filters</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="reset-btn" id="reset-filters" data-i18n="resetAll">Reset all</button>
+        <button class="sidebar-close-btn" id="sidebar-close">✕</button>
+      </div>
+    </div>
+
+    <!-- Main Category -->
+    <div class="filter-group">
+      <label class="filter-label" data-i18n="category">Category</label>
+      <select id="filter-main-category" class="filter-select">
+        <option value="" data-i18n-opt="allCategories">All categories</option>
+      </select>
+    </div>
+
+    <!-- Subcategory -->
+    <div class="filter-group" id="sub-category-group" style="display:none;">
+      <label class="filter-label" data-i18n="subcategory">Subcategory</label>
+      <select id="filter-category" class="filter-select">
+        <option value="" data-i18n-opt="allSubcategories">All subcategories</option>
+      </select>
+    </div>
+
+    <!-- Min Stars -->
+    <div class="filter-group">
+      <label class="filter-label" data-i18n="minStarRating">Min star rating</label>
+      <div class="range-row">
+        <input type="range" id="filter-stars" min="0" max="5" step="0.1" value="0" />
+        <span class="range-value" id="stars-val">Any</span>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-val="4.5">4.5+</button>
+        <button class="star-btn" data-val="4.7">4.7+</button>
+        <button class="star-btn" data-val="4.9">4.9+</button>
+      </div>
+    </div>
+
+    <!-- Max Return Rate -->
+    <div class="filter-group">
+      <label class="filter-label" data-i18n="maxReturnRate">Max return rate</label>
+      <div class="range-row">
+        <input type="range" id="filter-return" min="0" max="1.4" step="0.1" value="1.4" />
+        <span class="range-value" id="return-val">1.4%</span>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-return="0">0%</button>
+        <button class="star-btn" data-return="0.5">≤0.5%</button>
+        <button class="star-btn" data-return="1.0">≤1.0%</button>
+      </div>
+    </div>
+
+    <!-- Min Reviews -->
+    <div class="filter-group">
+      <label class="filter-label" data-i18n="minReviews">Min reviews</label>
+      <div class="range-row">
+        <input type="range" id="filter-reviews" min="0" max="500" step="5" value="0" />
+        <span class="range-value" id="reviews-val">Any</span>
+      </div>
+    </div>
+
+    <!-- Min Recommend Rate -->
+    <div class="filter-group" id="recommend-filter-group">
+      <label class="filter-label" data-i18n="minRecommend">Min recommend rate</label>
+      <div class="range-row">
+        <input type="range" id="filter-recommend" min="0" max="100" step="1" value="0" />
+        <span class="range-value" id="recommend-val">Any</span>
+      </div>
+    </div>
+
+    <!-- Source -->
+    <div class="filter-group">
+      <label class="filter-label" data-i18n="source">Source</label>
+      <select id="filter-source" class="filter-select">
+        <option value="">All sources</option>
+        <optgroup label="🇨🇿 Czech Republic">
+          <option value="alza"      data-market="CZ">Alza.cz</option>
+          <option value="heureka"   data-market="CZ">Heureka.cz</option>
+          <option value="zbozi"     data-market="CZ">Zbozi.cz</option>
+          <option value="dtest"     data-market="CZ">D-test.cz</option>
+          <option value="datart"    data-market="CZ">Datart.cz</option>
+        </optgroup>
+        <optgroup label="🇩🇪 Germany">
+          <option value="warentest" data-market="DE">Stiftung Warentest</option>
+          <option value="otto"      data-market="DE">Otto.de</option>
+          <option value="amazon"    data-market="DE">Amazon.de</option>
+        </optgroup>
+        <optgroup label="🇵🇱 Poland">
+          <option value="ceneo"     data-market="PL">Ceneo.pl</option>
+        </optgroup>
+        <optgroup label="🌐 Global">
+          <option value="amazon_us" data-market="US">Amazon.com (US)</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- Quality keywords -->
+    <div class="filter-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="filter-label" style="margin-bottom:0" data-i18n="qualitySignals">Quality signals</label>
+        <button id="kw-clear-btn" class="kw-clear-btn" style="display:none" title="Clear filter">✕ Clear</button>
+      </div>
+      <div class="kw-filter-pills" id="kw-filter-pills"></div>
+    </div>
+
+    <!-- Products to avoid -->
+    <div class="filter-group">
+      <label class="filter-label">⚠️ Problematic products</label>
+      <button id="avoid-toggle" class="avoid-btn" data-active="0">
+        Show products to avoid
+      </button>
+      <div id="avoid-info" class="avoid-info" style="display:none">
+        Showing products rated &lt;3.5★ or &lt;65% recommend with 100+ reviews
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="results-info" id="results-info">Loading…</div>
+      <div class="toolbar-right">
+        <label class="sort-label" data-i18n="sortBy">Sort by</label>
+        <select id="sort-by" class="filter-select sort-select">
+          <!-- populated by buildSortOptions() on load and language change -->
+        </select>
+        <div class="view-toggle">
+          <button class="view-btn active" id="view-grid" title="Grid view">⊞</button>
+          <button class="view-btn" id="view-list" title="List view">☰</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCT GRID -->
+    <div class="product-grid" id="product-grid">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p data-i18n="loading">Loading products…</p>
+      </div>
+    </div>
+
+    <!-- PAGINATION -->
+    <div class="pagination" id="pagination"></div>
+
+  </main>
+</div>
+
+<!-- PRODUCT DETAIL MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div class="modal-content" id="modal-content"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

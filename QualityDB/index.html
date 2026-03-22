@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quality Product Database</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <span class="logo-icon">✦</span>
+      <span class="logo-text">QualityDB</span>
+    </div>
+    <div class="header-stats" id="header-stats">
+      <span class="stat-pill"><span id="stat-total">—</span> products</span>
+      <span class="stat-pill">⭐ <span id="stat-stars">—</span> avg</span>
+    </div>
+  </div>
+</header>
+
+<!-- SEARCH BAR -->
+<div class="search-section">
+  <div class="search-wrap">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search products, brands, descriptions…" autocomplete="off" />
+      <button class="search-clear" id="search-clear" title="Clear">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE FILTER TOGGLE -->
+<button class="mobile-filter-btn" id="mobile-filter-btn">
+  <span>⚙</span> Filters
+</button>
+
+<!-- SIDEBAR BACKDROP (mobile) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+<!-- MAIN LAYOUT -->
+<div class="layout">
+
+  <!-- SIDEBAR FILTERS -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h2>Filters</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="reset-btn" id="reset-filters">Reset all</button>
+        <button class="sidebar-close-btn" id="sidebar-close">✕</button>
+      </div>
+    </div>
+
+    <!-- Main Category -->
+    <div class="filter-group">
+      <label class="filter-label">Category</label>
+      <select id="filter-main-category" class="filter-select">
+        <option value="">All categories</option>
+        <!-- populated by JS via /api/categories -->
+      </select>
+    </div>
+
+    <!-- Subcategory (shown only when a main category is selected) -->
+    <div class="filter-group" id="sub-category-group" style="display:none;">
+      <label class="filter-label">Subcategory</label>
+      <select id="filter-category" class="filter-select">
+        <option value="">All subcategories</option>
+        <!-- populated by JS based on main category selection -->
+      </select>
+    </div>
+
+    <!-- Min Stars -->
+    <div class="filter-group">
+      <label class="filter-label">Min star rating</label>
+      <div class="range-row">
+        <input type="range" id="filter-stars" min="0" max="5" step="0.1" value="0" />
+        <span class="range-value" id="stars-val">Any</span>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-val="4.5">4.5+</button>
+        <button class="star-btn" data-val="4.7">4.7+</button>
+        <button class="star-btn" data-val="4.9">4.9+</button>
+      </div>
+    </div>
+
+    <!-- Max Return Rate -->
+    <div class="filter-group">
+      <label class="filter-label">Max return rate</label>
+      <div class="range-row">
+        <input type="range" id="filter-return" min="0" max="1.4" step="0.1" value="1.4" />
+        <span class="range-value" id="return-val">1.4%</span>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-return="0">0%</button>
+        <button class="star-btn" data-return="0.5">≤0.5%</button>
+        <button class="star-btn" data-return="1.0">≤1.0%</button>
+      </div>
+    </div>
+
+    <!-- Min Reviews -->
+    <div class="filter-group">
+      <label class="filter-label">Min reviews</label>
+      <div class="range-row">
+        <input type="range" id="filter-reviews" min="0" max="500" step="5" value="0" />
+        <span class="range-value" id="reviews-val">Any</span>
+      </div>
+    </div>
+
+    <!-- Min Recommend Rate -->
+    <div class="filter-group">
+      <label class="filter-label">Min recommend rate</label>
+      <div class="range-row">
+        <input type="range" id="filter-recommend" min="0" max="100" step="1" value="0" />
+        <span class="range-value" id="recommend-val">Any</span>
+      </div>
+    </div>
+
+    <!-- Source -->
+    <div class="filter-group">
+      <label class="filter-label">Source</label>
+      <select id="filter-source" class="filter-select">
+        <option value="">All sources (CZ)</option>
+        <optgroup label="🇨🇿 Czech Republic">
+          <option value="alza">Alza.cz</option>
+          <option value="heureka">Heureka.cz</option>
+          <option value="zbozi">Zbozi.cz</option>
+          <option value="dtest">D-test.cz</option>
+          <option value="datart">Datart.cz</option>
+        </optgroup>
+        <optgroup label="🇩🇪 Germany">
+          <option value="warentest">Stiftung Warentest</option>
+          <option value="otto">Otto.de</option>
+          <option value="amazon">Amazon.de</option>
+        </optgroup>
+        <optgroup label="🇵🇱 Poland">
+          <option value="ceneo">Ceneo.pl</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <!-- Quality keywords -->
+    <div class="filter-group">
+      <label class="filter-label">Quality signals</label>
+      <div class="kw-filter-pills" id="kw-filter-pills">
+        <!-- populated by JS -->
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="results-info" id="results-info">Loading…</div>
+      <div class="toolbar-right">
+        <label class="sort-label">Sort by</label>
+        <select id="sort-by" class="filter-select sort-select">
+          <option value="ReturnRate_pct">Return rate ↑</option>
+          <option value="AvgStarRating_desc">Stars ↓</option>
+          <option value="RecommendRate_pct_desc">Recommend % ↓</option>
+          <option value="ReviewsCount_desc">Most reviews</option>
+          <option value="Price_CZK">Price ↑</option>
+          <option value="Price_CZK_desc">Price ↓</option>
+          <option value="Name">Name A–Z</option>
+        </select>
+        <div class="view-toggle">
+          <button class="view-btn active" id="view-grid" title="Grid view">⊞</button>
+          <button class="view-btn" id="view-list" title="List view">☰</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCT GRID -->
+    <div class="product-grid" id="product-grid">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Loading products…</p>
+      </div>
+    </div>
+
+    <!-- PAGINATION -->
+    <div class="pagination" id="pagination"></div>
+
+  </main>
+</div>
+
+<!-- PRODUCT DETAIL MODAL -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal">
+    <button class="modal-close" id="modal-close">✕</button>
+    <div class="modal-content" id="modal-content"></div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

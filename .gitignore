@@ -1,0 +1,24 @@
+# Database files — never commit these (too large, contains scraped data)
+products.db
+products.db-wal
+products.db-shm
+
+# HuggingFace download cache
+QualityDB/scraper/.hf_cache/
+.hf_cache/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS junk
+.DS_Store
+
+# Logs
+*.log
+
+# Virtual environments
+venv/
+.venv/
+env/
