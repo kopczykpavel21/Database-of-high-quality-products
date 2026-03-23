@@ -40,46 +40,45 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 HEADERS = {
-    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cache-Control": "max-age=0",
+    "Sec-Ch-Ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 # ── Categories ────────────────────────────────────────────────────────────────
 # Conrad category URLs: https://www.conrad.de/de/c/{slug}.html
-# sorted by customer rating: ?sort=rating (or similar)
+# IMPORTANT: Conrad requires exact numeric IDs in every slug — wrong IDs = 404.
+# IDs below are verified from live Conrad.de category pages.
 CATEGORIES = [
-    # Raspberry Pi & Arduino — Conrad's strongest category
-    {"name": "Raspberry Pi & SBC",   "main": "Počítače a notebooky",  "slug": "raspberry-pi-single-board-computers-825002"},
-    {"name": "Arduino",              "main": "Průmyslové zboží",       "slug": "arduino-827001"},
-    {"name": "Elektronické součástky","main": "Průmyslové zboží",      "slug": "elektronische-bauelemente-800005"},
+    # Raspberry Pi & Arduino — Conrad's flagship hobby/maker section
+    {"name": "Raspberry Pi & SBC",    "main": "Počítače a notebooky",  "slug": "raspberry-pi-2864444"},
+    {"name": "Arduino",               "main": "Průmyslové zboží",      "slug": "arduino-2871550"},
 
     # Messtechnik / Měřicí přístroje
-    {"name": "Měřicí přístroje",     "main": "Průmyslové zboží",       "slug": "messtechnik-804001"},
-    {"name": "Multimetry",           "main": "Průmyslové zboží",       "slug": "digitalmultimeter-804003"},
-    {"name": "Osciloskopy",          "main": "Průmyslové zboží",       "slug": "oszilloskope-804009"},
+    {"name": "Měřicí přístroje",      "main": "Průmyslové zboží",      "slug": "messgeraete-37381"},
 
     # Nářadí a dílna
-    {"name": "Pájecí stanice",       "main": "Průmyslové zboží",       "slug": "loetkolben-loetstation-808003"},
-    {"name": "Napájecí zdroje",      "main": "Průmyslové zboží",       "slug": "labornetzgeraete-808007"},
+    {"name": "Pájení a elektrotechnika", "main": "Průmyslové zboží",   "slug": "loettechnik-17583"},
+    {"name": "Napájecí zdroje",          "main": "Průmyslové zboží",   "slug": "labornetzteile-17452"},
 
-    # Počítačové příslušenství
-    {"name": "USB huby",             "main": "Počítače a notebooky",   "slug": "usb-hubs-820073"},
-    {"name": "Síťové kamery",        "main": "Elektro",                "slug": "netzwerkkameras-823034"},
-    {"name": "Smart Home",           "main": "Elektro",                "slug": "smart-home-826001"},
+    # Smart Home & IoT
+    {"name": "Smart Home",            "main": "Elektro",               "slug": "alle-geraete-hersteller-17200"},
 
-    # Audio / Video
-    {"name": "Sluchátka",            "main": "Elektro",                "slug": "kopfhoerer-821001"},
-    {"name": "Bezdrátové reproduktory","main": "Elektro",              "slug": "bluetooth-lautsprecher-821014"},
-
-    # Kabely a konektory
-    {"name": "Kabely a adaptéry",    "main": "Elektro",                "slug": "kabel-stecker-800017"},
+    # Audio
+    {"name": "Reproduktory",          "main": "Elektro",               "slug": "lautsprecher-17483"},
+    {"name": "Sluchátka",             "main": "Elektro",               "slug": "kopfhoerer-zubehoer-1688942"},
 
     # Modely & RC
-    {"name": "RC modely",            "main": "Hračky",                 "slug": "rc-fahrzeuge-827019"},
-    {"name": "Drony",                "main": "Foto a video",           "slug": "drohnen-827028"},
-
-    # Osvětlení
-    {"name": "LED osvětlení",        "main": "Domácí potřeby",         "slug": "led-leuchten-808019"},
+    {"name": "Drony",                 "main": "Foto a video",          "slug": "drohnen-221790"},
 ]
 
 
@@ -169,17 +168,24 @@ def parse_url(card):
 
 def warm_up(session):
     try:
-        resp = session.get("https://www.conrad.de/", headers=HEADERS, timeout=20)
+        resp = session.get("https://www.conrad.de/de/", headers=HEADERS, timeout=20)
         resp.raise_for_status()
-        log.info(f"Session ready — {len(session.cookies)} cookies")
-        time.sleep(2.0)
+        log.info(f"Session ready — status {resp.status_code}, {len(session.cookies)} cookies")
+        time.sleep(2.5)
     except Exception as e:
         log.warning(f"Warmup failed: {e}")
 
 
 def scrape_page(url, session):
+    page_headers = {**HEADERS, "Referer": "https://www.conrad.de/de/", "Sec-Fetch-Site": "same-origin"}
     try:
-        resp = session.get(url, headers=HEADERS, timeout=25)
+        resp = session.get(url, headers=page_headers, timeout=25)
+        if resp.status_code == 404:
+            log.warning(f"  404 Not Found — check category slug/ID: {url}")
+            return []
+        if resp.status_code == 403:
+            log.warning(f"  403 Forbidden — bot protection at {url}")
+            return []
         resp.raise_for_status()
     except Exception as e:
         log.warning(f"  Request failed: {e}")
@@ -285,7 +291,7 @@ def run_scraper(dry_run=False):
     log.info("=" * 60)
     log.info("QualityDB — Conrad.de Scraper")
     log.info("=" * 60)
-    session = requests.Session(impersonate="chrome120")
+    session = requests.Session(impersonate="chrome124")
     warm_up(session)
     conn = sqlite3.connect(DB_PATH)
     summary = {"total_added": 0, "categories_scraped": 0, "errors": []}

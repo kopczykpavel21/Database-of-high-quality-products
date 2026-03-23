@@ -38,42 +38,49 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# Full browser headers including Sec-Fetch-* to pass Cloudflare/bot protection
 HEADERS = {
-    "Accept-Language": "cs-CZ,cs;q=0.9,en;q=0.8",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br, zstd",
+    "Accept-Language": "cs-CZ,cs;q=0.9,sk;q=0.8,en-US;q=0.7,en;q=0.6",
+    "Cache-Control": "max-age=0",
+    "Sec-Ch-Ua": '"Google Chrome";v="124", "Chromium";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
 }
 
 # ── Categories ────────────────────────────────────────────────────────────────
-# CZC URL pattern: https://www.czc.cz/{slug}/produkty?sort=review_date_desc
-# Sort options: review_date_desc, price_asc, price_desc, name_asc
-# We sort by highest-rated using: sort=review_score_desc (or similar)
+# CZC URL pattern: https://www.czc.cz/{slug}/produkty
+# Slugs are FLAT (no subdirectory paths) — all categories live at root level.
 CATEGORIES = [
     # Mobily & tablety
-    {"name": "Smartphones",        "main": "Telefony a tablety",     "slug": "mobily-tablety/mobily"},
-    {"name": "Tablety",            "main": "Telefony a tablety",     "slug": "mobily-tablety/tablety"},
-    {"name": "Smartwatch",         "main": "Telefony a tablety",     "slug": "mobily-tablety/chytre-hodinky"},
-    {"name": "Pouzdra a kryty",    "main": "Telefony a tablety",     "slug": "mobily-tablety/kryty-pouzdra"},
+    {"name": "Smartphones",        "main": "Telefony a tablety",     "slug": "mobilni-telefony"},
+    {"name": "Tablety",            "main": "Telefony a tablety",     "slug": "tablety"},
+    {"name": "Smartwatch",         "main": "Telefony a tablety",     "slug": "chytre-hodinky"},
 
     # Počítače & notebooky
-    {"name": "Notebooky",          "main": "Počítače a notebooky",   "slug": "pocitace-ntb/notebooky"},
-    {"name": "Monitory",           "main": "Počítače a notebooky",   "slug": "pocitace-ntb/monitory"},
-    {"name": "Klávesnice",         "main": "Počítače a notebooky",   "slug": "pocitace-ntb/klavesnice"},
-    {"name": "Myši",               "main": "Počítače a notebooky",   "slug": "pocitace-ntb/mysi"},
-    {"name": "SSD",                "main": "Počítače a notebooky",   "slug": "pocitace-ntb/ssd"},
-    {"name": "Grafické karty",     "main": "Počítače a notebooky",   "slug": "pocitace-ntb/graficke-karty"},
+    {"name": "Notebooky",          "main": "Počítače a notebooky",   "slug": "notebooky"},
+    {"name": "Monitory",           "main": "Počítače a notebooky",   "slug": "graficke-monitory"},
+    {"name": "Klávesnice",         "main": "Počítače a notebooky",   "slug": "klavesnice"},
+    {"name": "Myši",               "main": "Počítače a notebooky",   "slug": "mysi"},
+    {"name": "SSD",                "main": "Počítače a notebooky",   "slug": "ssd"},
+    {"name": "Grafické karty",     "main": "Počítače a notebooky",   "slug": "graficke-karty"},
 
     # Elektronika
-    {"name": "Sluchátka",          "main": "Elektro",                "slug": "audio/sluchatka"},
-    {"name": "Reproduktory",       "main": "Elektro",                "slug": "audio/reproduktory"},
-    {"name": "Televizory",         "main": "Elektro",                "slug": "tv-audio-foto/televize"},
-    {"name": "Herní příslušenství","main": "Počítače a notebooky",   "slug": "hry-konzole/prislusenstvi"},
+    {"name": "Sluchátka",          "main": "Elektro",                "slug": "sluchatka"},
+    {"name": "Reproduktory",       "main": "Elektro",                "slug": "reproduktory"},
+    {"name": "Televizory",         "main": "Elektro",                "slug": "televizory"},
 
     # Foto
-    {"name": "Fotoaparáty",        "main": "Foto a video",           "slug": "tv-audio-foto/fotoaparaty"},
+    {"name": "Fotoaparáty",        "main": "Foto a video",           "slug": "fotoaparaty"},
 
     # Síťové prvky
-    {"name": "Routery",            "main": "Počítače a notebooky",   "slug": "site-servery/routery"},
-    {"name": "Síťové prvky",       "main": "Počítače a notebooky",   "slug": "site-servery/aktivni-prvky"},
+    {"name": "Routery",            "main": "Počítače a notebooky",   "slug": "routery"},
 ]
 
 
@@ -175,15 +182,20 @@ def warm_up(session):
     try:
         resp = session.get("https://www.czc.cz/", headers=HEADERS, timeout=20)
         resp.raise_for_status()
-        log.info(f"Session ready — {len(session.cookies)} cookies")
-        time.sleep(1.5)
+        log.info(f"Session ready — status {resp.status_code}, {len(session.cookies)} cookies")
+        time.sleep(2.0)
     except Exception as e:
         log.warning(f"Warmup failed: {e}")
 
 
 def scrape_page(url, session):
+    # Add Referer so requests look like they come from browsing the site
+    page_headers = {**HEADERS, "Referer": "https://www.czc.cz/", "Sec-Fetch-Site": "same-origin"}
     try:
-        resp = session.get(url, headers=HEADERS, timeout=25)
+        resp = session.get(url, headers=page_headers, timeout=25)
+        if resp.status_code == 403:
+            log.warning(f"  403 Forbidden — bot protection active at {url}")
+            return []
         resp.raise_for_status()
     except Exception as e:
         log.warning(f"  Request failed: {e}")
@@ -291,7 +303,7 @@ def run_scraper(dry_run=False):
     log.info("=" * 60)
     log.info("QualityDB — CZC.cz Scraper")
     log.info("=" * 60)
-    session = requests.Session(impersonate="chrome120")
+    session = requests.Session(impersonate="chrome124")
     warm_up(session)
     conn = sqlite3.connect(DB_PATH)
     summary = {"total_added": 0, "categories_scraped": 0, "errors": []}
