@@ -91,6 +91,27 @@ def _run_scrapers():
         except Exception as e:
             print(f"[scraper] Zbozi error: {e}")
 
+        try:
+            from scraper.heureka_sk_scraper import run_scraper as run_heureka_sk
+            result = run_heureka_sk()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Heureka.sk error: {e}")
+
+        try:
+            from scraper.czc_scraper import run_scraper as run_czc
+            result = run_czc()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] CZC error: {e}")
+
+        try:
+            from scraper.conrad_scraper import run_scraper as run_conrad
+            result = run_conrad()
+            total_added += result.get("total_added", 0)
+        except Exception as e:
+            print(f"[scraper] Conrad error: {e}")
+
     except Exception as e:
         with _scraper_lock:
             _scraper_status["last_error"] = str(e)
@@ -246,10 +267,13 @@ def query_products(params):
         "otto": "DE", "otto_de": "DE",
         "amazon": "DE", "amazon_de": "DE",
         "warentest": "DE",
+        "conrad": "DE",
         "dtest": "CZ",
         "alza": "CZ", "heureka": "CZ", "zbozi": "CZ", "datart": "CZ",
+        "czc": "CZ",
         "ceneo": "PL",
         "amazon_us": "US",
+        "heureka_sk": "SK",
     }
     country = SOURCE_COUNTRY.get(source, None) if source else None
 

@@ -12,7 +12,8 @@ let categoriesTree = [];   // [{main, subs:[{sub,count}]}]
 const SOURCE_LABELS = {
   alza: "Alza.cz", heureka: "Heureka.cz", zbozi: "Zbozi.cz",
   amazon: "Amazon.de", amazon_us: "Amazon.com", otto: "Otto.de", warentest: "Stiftung Warentest",
-  dtest: "D-test.cz", datart: "Datart.cz", ceneo: "Ceneo.pl"
+  dtest: "D-test.cz", datart: "Datart.cz", ceneo: "Ceneo.pl",
+  czc: "CZC.cz", heureka_sk: "Heureka.sk", conrad: "Conrad.de"
 };
 
 function priceStr(p) {
@@ -122,7 +123,7 @@ async function fetchCategories() {
   const src = document.getElementById("filter-source").value;
   const SOURCE_COUNTRY_MAP = { otto:"DE", warentest:"DE", amazon:"DE", ceneo:"PL",
                                 dtest:"CZ", alza:"CZ", heureka:"CZ", zbozi:"CZ", datart:"CZ",
-                                amazon_us:"US" };
+                                amazon_us:"US", czc:"CZ", heureka_sk:"SK", conrad:"DE" };
   // No source selected → no country filter → all-market categories
   const country = src ? (SOURCE_COUNTRY_MAP[src] || "") : "";
   const res = await fetch(`/api/categories${country ? "?country=" + country : ""}`);
