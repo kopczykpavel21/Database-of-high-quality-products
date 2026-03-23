@@ -1,4 +1,4 @@
-app = "qualitydb-pavel"
+app = "database-of-high-quality-products"
 primary_region = "ams"
 
 [build]

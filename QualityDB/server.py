@@ -450,9 +450,24 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    # Create an empty DB with the right schema if it doesn't exist yet.
+    # This lets the server start on a fresh Fly.io volume — upload products.db
+    # afterwards via: fly sftp shell -a database-of-high-quality-products
     if not os.path.exists(DB_PATH):
-        print("Database not found. Run load_data.py first.")
-        exit(1)
+        print(f"No database at {DB_PATH} — creating empty DB. Upload products.db to populate.")
+        _init = sqlite3.connect(DB_PATH)
+        _init.execute("""CREATE TABLE IF NOT EXISTS products (
+            id INTEGER, Name TEXT, Category TEXT, MainCategory TEXT,
+            ProductURL TEXT, Price_CZK REAL, Price_EUR REAL,
+            AvgStarRating REAL, StarRatingsCount INTEGER, ReviewsCount INTEGER,
+            RecommendRate_pct REAL, ReturnRate_pct REAL,
+            Stars5_Count INTEGER, Stars4_Count INTEGER, Stars3_Count INTEGER,
+            Stars2_Count INTEGER, Stars1_Count INTEGER,
+            source TEXT, country TEXT, currency TEXT,
+            keywords TEXT, details_json TEXT, Description TEXT
+        )""")
+        _init.commit()
+        _init.close()
     # On Render/cloud the PORT env var is set automatically.
     # Locally it defaults to 8080.
     port = int(os.environ.get("PORT", 8080))
