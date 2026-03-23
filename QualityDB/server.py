@@ -19,7 +19,6 @@ STATIC  = os.path.join(os.path.dirname(__file__), "static")
 TMPL    = os.path.join(os.path.dirname(__file__), "templates", "index.html")
 PAGE_SIZE = 24
 
-<<<<<<< HEAD
 def open_db():
     """Open DB with WAL mode + 30 s timeout so server and scrapers can coexist."""
     conn = sqlite3.connect(DB_PATH, timeout=30)
@@ -43,8 +42,6 @@ def ensure_indexes(conn):
         CREATE INDEX IF NOT EXISTS idx_keywords        ON products(keywords);
     """)
 
-=======
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
 # ── Background scraper state ──────────────────────────────────────────────────
 _scraper_status = {
     "running":    False,
@@ -143,11 +140,7 @@ def _scraper_loop():
 
 
 def get_categories():
-<<<<<<< HEAD
     conn = open_db()
-=======
-    conn = sqlite3.connect(DB_PATH)
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     rows = conn.execute(
         "SELECT Category, COUNT(*) as cnt FROM products "
         "GROUP BY Category ORDER BY cnt DESC"
@@ -156,25 +149,16 @@ def get_categories():
     return rows
 
 
-<<<<<<< HEAD
 def get_categories_hierarchical(country=None):
     """Return list of {main, subs: [{sub, count}]} sorted by main name.
     Pass country=None to get categories across all markets."""
     from collections import OrderedDict
     conn = open_db()
-=======
-def get_categories_hierarchical():
-    """Return list of {main, subs: [{sub, count}]} sorted by main name.
-    Falls back to a flat Category-based list if MainCategory column is missing."""
-    from collections import OrderedDict
-    conn = sqlite3.connect(DB_PATH)
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
 
     # Check whether MainCategory column exists
     cols = [r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()]
     has_main = "MainCategory" in cols
 
-<<<<<<< HEAD
     country_clause = "WHERE COALESCE(country,'CZ') = ?" if country else ""
     params = (country,) if country else ()
 
@@ -191,22 +175,6 @@ def get_categories_hierarchical():
             f"FROM products {country_clause} "
             f"GROUP BY Category ORDER BY cnt DESC",
             params
-=======
-    if has_main:
-        rows = conn.execute(
-            "SELECT COALESCE(MainCategory,'Ostatní') as main, Category, COUNT(*) as cnt "
-            "FROM products GROUP BY main, Category ORDER BY main, cnt DESC"
-        ).fetchall()
-    else:
-        # Fallback: treat every Category as its own "main" group
-        logging.warning(
-            "MainCategory column missing — run `python3 restructure_categories.py` "
-            "to enable two-level category filtering."
-        )
-        rows = conn.execute(
-            "SELECT COALESCE(Category,'Ostatní') as main, Category, COUNT(*) as cnt "
-            "FROM products GROUP BY Category ORDER BY cnt DESC"
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
         ).fetchall()
 
     conn.close()
@@ -220,11 +188,7 @@ def get_categories_hierarchical():
 def query_keywords():
     """Return all distinct keyword tags with their product counts, sorted by count."""
     import json as _json
-<<<<<<< HEAD
     conn = open_db()
-=======
-    conn = sqlite3.connect(DB_PATH)
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     rows = conn.execute(
         "SELECT keywords FROM products WHERE keywords IS NOT NULL"
     ).fetchall()
@@ -252,7 +216,6 @@ def query_products(params):
     max_return  = params.get("max_return", [""])[0]
     min_reviews = params.get("min_reviews", [""])[0]
     min_rec     = params.get("min_recommend", [""])[0]
-<<<<<<< HEAD
     sort_by     = params.get("sort", ["RecommendRate_pct"])[0]
     order       = params.get("order", ["desc"])[0]
     page        = int(params.get("page", ["1"])[0])
@@ -286,21 +249,6 @@ def query_products(params):
     conditions, plist = [], []
     if country:
         conditions.append("COALESCE(country,'CZ') = ?"); plist.append(country)
-=======
-    sort_by     = params.get("sort", ["ReturnRate_pct"])[0]
-    order       = params.get("order", ["asc"])[0]
-    page        = int(params.get("page", ["1"])[0])
-    source      = params.get("source", [""])[0]
-    keyword     = params.get("keyword", [""])[0]
-
-    allowed_sort = {"ReturnRate_pct","AvgStarRating","ReviewsCount",
-                    "RecommendRate_pct","Price_CZK","Name"}
-    if sort_by not in allowed_sort:
-        sort_by = "ReturnRate_pct"
-    order_sql = "ASC" if order == "asc" else "DESC"
-
-    conditions, plist = [], []
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     if q:
         conditions.append("(Name LIKE ? OR Category LIKE ? OR Description LIKE ?)")
         plist += [f"%{q}%", f"%{q}%", f"%{q}%"]
@@ -317,7 +265,6 @@ def query_products(params):
     if min_rec:
         conditions.append("RecommendRate_pct >= ?"); plist.append(float(min_rec))
     if source:
-<<<<<<< HEAD
         # Map UI filter values → actual source values stored in DB
         source_map = {
             "amazon": "source IN ('amazon','amazon_de')",
@@ -350,24 +297,12 @@ def query_products(params):
     null_last = f"CASE WHEN {sort_expr} IS NULL THEN 1 ELSE 0 END"
 
     conn = open_db()
-=======
-        conditions.append("source = ?"); plist.append(source)
-    if keyword:
-        conditions.append('keywords LIKE ?'); plist.append(f'%"{keyword}"%')
-
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
-    null_last = f"CASE WHEN {sort_by} IS NULL THEN 1 ELSE 0 END"
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     total = conn.execute(f"SELECT COUNT(*) FROM products {where}", plist).fetchone()[0]
     offset = (page - 1) * PAGE_SIZE
     rows = conn.execute(
         f"""WITH ranked AS (
               SELECT *,
                 RANK() OVER (
-<<<<<<< HEAD
                   PARTITION BY Category
                   ORDER BY (
                     CASE
@@ -387,32 +322,14 @@ def query_products(params):
                    COALESCE(Price_EUR, NULL) as Price_EUR,
                    COALESCE(country, 'CZ') as country,
                    currency,
-=======
-                  PARTITION BY source
-                  ORDER BY (
-                    COALESCE(RecommendRate_pct, 0) * COALESCE(ReviewsCount, 0)
-                    / (COALESCE(ReviewsCount, 0) + 50.0)
-                  ) DESC
-                ) AS source_rank,
-                COUNT(*) OVER (PARTITION BY source) AS source_total
-              FROM products
-            )
-            SELECT id, Name, MainCategory, Category, ProductURL, Price_CZK,
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
                    AvgStarRating, StarRatingsCount, ReviewsCount,
                    RecommendRate_pct, ReturnRate_pct,
                    Stars5_Count, Stars4_Count, Stars3_Count,
                    Stars2_Count, Stars1_Count, source,
-<<<<<<< HEAD
                    source_rank, source_total, keywords,
                    COALESCE(details_json, NULL) as details_json
             FROM ranked {where}
             ORDER BY {null_last}, {sort_expr} {order_sql}
-=======
-                   source_rank, source_total, keywords
-            FROM ranked {where}
-            ORDER BY {null_last}, {sort_by} {order_sql}
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
             LIMIT ? OFFSET ?""",
         plist + [PAGE_SIZE, offset]
     ).fetchall()
@@ -427,12 +344,7 @@ def query_products(params):
 
 
 def query_stats():
-<<<<<<< HEAD
     conn = open_db()
-=======
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     r = conn.execute("""
         SELECT COUNT(*) as total,
                ROUND(AVG(AvgStarRating),2) as avg_stars,
@@ -480,15 +392,12 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/categories":
             try:
-<<<<<<< HEAD
                 country = params.get("country", [""])[0]
-                if country not in ("CZ", "DE", "PL"):
+                if country not in ("CZ", "DE", "PL", "SK", "US"):
                     country = None   # None = all countries
                 self.send_json(get_categories_hierarchical(country))
-=======
-                self.send_json(get_categories_hierarchical())
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
             except Exception as e:
+                import logging
                 logging.error(f"/api/categories failed: {e}")
                 self.send_json([])
 
@@ -549,14 +458,11 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     host = "0.0.0.0"   # listen on all interfaces (required for cloud hosting)
 
-<<<<<<< HEAD
     # Ensure all indexes exist (fast no-op if already created)
     _conn = open_db()
     ensure_indexes(_conn)
     _conn.close()
 
-=======
->>>>>>> 1217e8b0bc77abed8571bb47f190de2b7a2f4bee
     # Start background scraper scheduler (runs every 24 h, first run after 60 s)
     bg = threading.Thread(target=_scraper_loop, daemon=True)
     bg.start()
