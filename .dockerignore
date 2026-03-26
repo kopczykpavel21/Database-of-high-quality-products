@@ -1,0 +1,31 @@
+# Database files — live on Fly volume, not in the image
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+QualityDB/backup/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*/__pycache__/
+
+# macOS
+.DS_Store
+
+# Logs & temp
+*.log
+/tmp/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# HuggingFace cache
+.hf_cache/
+QualityDB/scraper/.hf_cache/
+
+# Git
+.git/
