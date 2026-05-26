@@ -1,1 +1,681 @@
-"""\nrestructure_categories.py — QualityDB\n\nAdds a MainCategory column to products.db and maps every product to one of\n16 main categories + a cleaned subcategory.  Also fixes the most common\nmisclassification: phones/tablets landing in "Home Appliances", and ensures\nbags/backpacks and office furniture are in "Kancelář a příslušenství"\nrather than "Počítače a notebooky".\n\nRun:\n    python3 restructure_categories.py            # live run\n    python3 restructure_categories.py --dry-run  # preview only (no writes)\n"""\n\nimport sqlite3\nimport re\nimport os\nimport sys\nfrom collections import defaultdict\n\nDB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "products.db")\nDRY_RUN = "--dry-run" in sys.argv\n\n\n# ─────────────────────────────────────────────────────────────────────────────\n# CATEGORY MAP  (current Category value → (MainCategory, new Subcategory))\n# ─────────────────────────────────────────────────────────────────────────────\nCATEGORY_MAP = {\n    # ── Telefony a tablety ────────────────────────────────────────────────────\n    "Mobilní telefony":             ("Telefony a tablety",          "Mobilní telefony"),\n    "Mobile Phones":                ("Telefony a tablety",          "Mobilní telefony"),\n    "Tablet":                       ("Telefony a tablety",          "Tablety"),\n    "Tablety":                      ("Telefony a tablety",          "Tablety"),\n    "Tablets":                      ("Telefony a tablety",          "Tablety"),\n\n    # ── Počítače a notebooky ───────────────────────────────────────────────────\n    "Notebooky":                    ("Počítače a notebooky",        "Notebooky"),\n    "Monitory":                     ("Počítače a notebooky",        "Monitory"),\n    "Monitors":                     ("Počítače a notebooky",        "Monitory"),\n    "Příslušenství k notebookům":   ("Počítače a notebooky",        "Příslušenství k notebookům"),\n    "Laptop Accessories":           ("Počítače a notebooky",        "Příslušenství k notebookům"),\n    "Mini počítače":                ("Počítače a notebooky",        "Mini počítače"),\n    "Dokovací Stanice":             ("Počítače a notebooky",        "Dokovací stanice"),\n\n    # ── Kancelář a příslušenství ──────────────────────────────────────────────\n    # Moved out of "Počítače a notebooky" — bags/furniture aren't computers\n    "Kancelářské vybavení":         ("Kancelář a příslušenství",    "Kancelářské vybavení"),\n    "Tašky a batohy":               ("Kancelář a příslušenství",    "Tašky a batohy"),\n    "Bags & Backpacks":             ("Kancelář a příslušenství",    "Tašky a batohy"),\n\n    # ── PC komponenty ─────────────────────────────────────────────────────────\n    "Grafické karty":               ("PC komponenty",               "Grafické karty"),\n    "Procesory":                    ("PC komponenty",               "Procesory"),\n    "RAM":                          ("PC komponenty",               "RAM"),\n    "Základní desky":               ("PC komponenty",               "Základní desky"),\n    "PC skříně":                    ("PC komponenty",               "PC skříně"),\n    "Chlazení procesorů":           ("PC komponenty",               "Chlazení"),\n    "Napájení":                     ("PC komponenty",               "Napájení"),\n\n    # ── Herní technika ────────────────────────────────────────────────────────\n    "Herní Konzole":                ("Herní technika",              "Herní konzole"),\n    "Herní příslušenství":          ("Herní technika",              "Herní příslušenství"),\n    "Herní ovladače":               ("Herní technika",              "Herní ovladače"),\n    "Závodní příslušenství":        ("Herní technika",              "Závodní příslušenství"),\n    "Herní Židle":                  ("Herní technika",              "Herní sedačky"),\n    "Herní sedačky":                ("Herní technika",              "Herní sedačky"),\n    "Herní Křeslo":                 ("Herní technika",              "Herní sedačky"),\n    "Gaming Keyboards":             ("Herní technika",              "Herní příslušenství"),\n    "Herní klávesnice":             ("Herní technika",              "Herní příslušenství"),\n    "Gaming Mice":                  ("Herní technika",              "Herní příslušenství"),\n    "Herní myši":                   ("Herní technika",              "Herní příslušenství"),\n\n    # ── Zvuk a hudba ─────────────────────────────────────────────────────────\n    "Sluchátka":                    ("Zvuk a hudba",                "Sluchátka"),\n    "Headphones":                   ("Zvuk a hudba",                "Sluchátka"),\n    "Gaming Headsets":              ("Zvuk a hudba",                "Sluchátka"),\n    "Herní sluchátka":              ("Zvuk a hudba",                "Sluchátka"),\n    "Chrániče sluchu":              ("Zvuk a hudba",                "Sluchátka"),\n    "Bluetooth Headset":            ("Zvuk a hudba",                "Sluchátka"),\n    "Reproduktory":                 ("Zvuk a hudba",                "Reproduktory"),\n    "Speakers":                     ("Zvuk a hudba",                "Reproduktory"),\n    "Reproduktor":                  ("Zvuk a hudba",                "Reproduktory"),\n    "Reprosoustava":                ("Zvuk a hudba",                "Reproduktory"),\n    "Soundbary":                    ("Zvuk a hudba",                "Soundbary"),\n    "Soundbars":                    ("Zvuk a hudba",                "Soundbary"),\n    "Subwoofer":                    ("Zvuk a hudba",                "Soundbary"),\n    "Mikrofony":                    ("Zvuk a hudba",                "Mikrofony"),\n    "Hudební nástroje":             ("Zvuk a hudba",                "Hudební nástroje"),\n    "Hudební příslušenství":        ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Gramofony":                    ("Zvuk a hudba",                "Gramofony"),\n    "Rádia":                        ("Zvuk a hudba",                "Rádia a Hi-Fi"),\n    "Mikrosystémy":                 ("Zvuk a hudba",                "Rádia a Hi-Fi"),\n    "Digitální Piano":              ("Zvuk a hudba",                "Hudební nástroje"),\n\n    # ── Televize a video ──────────────────────────────────────────────────────\n    "Televize":                     ("Televize a video",            "Televize"),\n    "TVs":                          ("Televize a video",            "Televize"),\n    "Projektory":                   ("Televize a video",            "Projektory"),\n    "Projectors":                   ("Televize a video",            "Projektory"),\n    "Streamovací zařízení":         ("Televize a video",            "Streamovací zařízení"),\n    "Multimediální přehrávače":     ("Televize a video",            "Multimediální přehrávače"),\n\n    # ── Velké domácí spotřebiče ───────────────────────────────────────────────\n    "Pračky":                       ("Velké domácí spotřebiče",     "Pračky"),\n    "Sušičky prádla":               ("Velké domácí spotřebiče",     "Sušičky prádla"),\n    "Ledničky":                     ("Velké domácí spotřebiče",     "Ledničky"),\n    "Americké ledničky":            ("Velké domácí spotřebiče",     "Ledničky"),\n    "Mrazáky":                      ("Velké domácí spotřebiče",     "Mrazáky"),\n    "Myčky nádobí":                 ("Velké domácí spotřebiče",     "Myčky nádobí"),\n    "Sporáky":                      ("Velké domácí spotřebiče",     "Sporáky"),\n    "Trouby":                       ("Velké domácí spotřebiče",     "Trouby"),\n\n    # ── Malé domácí spotřebiče ────────────────────────────────────────────────\n    "Kávovary":                     ("Malé domácí spotřebiče",      "Kávovary"),\n    "Coffee Machines":              ("Malé domácí spotřebiče",      "Kávovary"),\n    "Varné konvice":                ("Malé domácí spotřebiče",      "Varné konvice"),\n    "Kettles":                      ("Malé domácí spotřebiče",      "Varné konvice"),\n    "Mixéry a roboty":              ("Malé domácí spotřebiče",      "Mixéry a roboty"),\n    "Kitchen Robots":               ("Malé domácí spotřebiče",      "Mixéry a roboty"),\n    "Blenders":                     ("Malé domácí spotřebiče",      "Mixéry a roboty"),\n    "Toustovače":                   ("Malé domácí spotřebiče",      "Toustovače"),\n    "Toasters":                     ("Malé domácí spotřebiče",      "Toustovače"),\n    "Mikrovlnné trouby":            ("Malé domácí spotřebiče",      "Mikrovlnné trouby"),\n    "Microwaves":                   ("Malé domácí spotřebiče",      "Mikrovlnné trouby"),\n    "Žehličky":                     ("Malé domácí spotřebiče",      "Žehličky"),\n    "Irons":                        ("Malé domácí spotřebiče",      "Žehličky"),\n    "Fény a stylingové přístroje":  ("Malé domácí spotřebiče",      "Fény a stylingové přístroje"),\n    "Fritézy":                      ("Malé domácí spotřebiče",      "Fritézy"),\n    "Ventilátory":                  ("Malé domácí spotřebiče",      "Ventilátory"),\n    "Parní čističe":                ("Malé domácí spotřebiče",      "Parní čističe"),\n    "Epilátory a holicí strojky":   ("Malé domácí spotřebiče",      "Péče o tělo"),\n\n    # ── Vysavače a úklid ──────────────────────────────────────────────────────\n    "Vysavače":                     ("Vysavače a úklid",            "Vysavače"),\n    "Vacuum Cleaners":              ("Vysavače a úklid",            "Vysavače"),\n    "Tyčové vysavače":              ("Vysavače a úklid",            "Tyčové vysavače"),\n    "Robotické vysavače":           ("Vysavače a úklid",            "Robotické vysavače"),\n    "Robot Vacuums":                ("Vysavače a úklid",            "Robotické vysavače"),\n\n    # ── Chytré zařízení ───────────────────────────────────────────────────────\n    "Chytré hodinky":               ("Chytré zařízení",             "Chytré hodinky"),\n    "Smartwatches":                 ("Chytré zařízení",             "Chytré hodinky"),\n    "Fitness Náramek":              ("Chytré zařízení",             "Fitness náramky"),\n    "Fitness náramky":              ("Chytré zařízení",             "Fitness náramky"),\n    "Fitness Trackers":             ("Chytré zařízení",             "Fitness náramky"),\n    "Čističky vzduchu":             ("Chytré zařízení",             "Čističky vzduchu"),\n    "Air Purifiers":                ("Chytré zařízení",             "Čističky vzduchu"),\n    "Chytrá domácnost":             ("Chytré zařízení",             "Chytrá domácnost"),\n    "Smart Home":                   ("Chytré zařízení",             "Chytrá domácnost"),\n    "IP kamery":                    ("Chytré zařízení",             "IP kamery"),\n    "IP Cameras":                   ("Chytré zařízení",             "IP kamery"),\n\n    # ── Foto a kamery ─────────────────────────────────────────────────────────\n    "Fotoaparáty":                  ("Foto a kamery",               "Fotoaparáty"),\n    "Digital Cameras":              ("Foto a kamery",               "Fotoaparáty"),\n    "Akční kamery":                 ("Foto a kamery",               "Akční kamery"),\n    "Action Cameras":               ("Foto a kamery",               "Akční kamery"),\n    "Webkamery":                    ("Foto a kamery",               "Webkamery"),\n    "Webcams":                      ("Foto a kamery",               "Webkamery"),\n\n    # ── Datová úložiště ───────────────────────────────────────────────────────\n    "SSD":                          ("Datová úložiště",             "SSD"),\n    "Pevné disky":                  ("Datová úložiště",             "Pevné disky"),\n    "HDD":                          ("Datová úložiště",             "Pevné disky"),\n    "Flash disky":                  ("Datová úložiště",             "Flash disky"),\n    "USB Flash Drives":             ("Datová úložiště",             "Flash disky"),\n    "Externí disky":                ("Datová úložiště",             "Externí disky"),\n    "NAS úložiště":                 ("Datová úložiště",             "NAS úložiště"),\n\n    # ── Sítě a konektivita ────────────────────────────────────────────────────\n    "Kabely a rozbočovače":         ("Sítě a konektivita",          "Kabely a rozbočovače"),\n    "Rozbočovače":                  ("Sítě a konektivita",          "Kabely a rozbočovače"),\n    "Konektory a adaptéry":         ("Sítě a konektivita",          "Kabely a rozbočovače"),\n    "Routery":                      ("Sítě a konektivita",          "Routery"),\n    "Routers":                      ("Sítě a konektivita",          "Routery"),\n    "Síťové přepínače":             ("Sítě a konektivita",          "Síťové přepínače"),\n    "Síťové komponenty":            ("Sítě a konektivita",          "Síťové komponenty"),\n    "Síťová Karta":                 ("Sítě a konektivita",          "Síťové komponenty"),\n    "Extendery":                    ("Sítě a konektivita",          "Extendery"),\n    "Anténní příslušenství":        ("Sítě a konektivita",          "Anténní příslušenství"),\n    "Síťová karta":                 ("Sítě a konektivita",          "Síťové komponenty"),\n\n    # ── Periferie a příslušenství ─────────────────────────────────────────────\n    "Myši":                         ("Periferie a příslušenství",   "Myši"),\n    "Mice":                         ("Periferie a příslušenství",   "Myši"),\n    "Trackball":                    ("Periferie a příslušenství",   "Myši"),\n    "Trackpad":                     ("Periferie a příslušenství",   "Myši"),\n    "Klávesnice":                   ("Periferie a příslušenství",   "Klávesnice"),\n    "Keyboards":                    ("Periferie a příslušenství",   "Klávesnice"),\n    "Brýle Na Počítač":             ("Periferie a příslušenství",   "Brýle na počítač"),\n    "Přepěťové ochrany":            ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Dobíjecí Stanice":             ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Dobíjecí Karta":               ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Hardware peněženky":           ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Autentizační Token":           ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Bezpečnostní zámky":           ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Stolní lampy":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Držáky":                       ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "PC příslušenství":             ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Dotykové Pero (Stylus)":       ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Ochranné Sklo":                ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Ochranná skla a fólie":        ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Kancelářské Křeslo":           ("Kancelář a příslušenství",    "Kancelářské vybavení"),\n    "Herní příslušenství":          ("Herní technika",              "Herní příslušenství"),\n\n    # ── Hry a hračky ─────────────────────────────────────────────────────────\n    "Hry a hračky":                 ("Hry a hračky",                "Hry a hračky"),\n    "Hra Na Pc A Xbox":             ("Hry a hračky",                "Hry"),\n    "Hra Na Pc":                    ("Hry a hračky",                "Hry"),\n    "Herní Doplněk / Dlc":          ("Hry a hračky",                "Hry"),\n    "Karetní Hra":                  ("Hry a hračky",                "Hry a hračky"),\n    "Příslušenství K Ovladači":     ("Herní technika",              "Herní příslušenství"),\n    "Herní příslušenství":          ("Herní technika",              "Herní příslušenství"),\n    "Závodní příslušenství":        ("Herní technika",              "Závodní příslušenství"),\n    "Sada Herního Příslušenství":   ("Herní technika",              "Herní příslušenství"),\n    "Kryt Na Herní Konzoli":        ("Herní technika",              "Herní příslušenství"),\n    "Brašna Pro Xbox Series S/X":   ("Herní technika",              "Herní příslušenství"),\n    "Gamepad":                      ("Herní technika",              "Herní ovladače"),\n    "Obal Na Ovladač":              ("Herní technika",              "Herní příslušenství"),\n\n    # ── Zbývající → správné kategorie ────────────────────────────────────────\n    "Externí vypalovačky":          ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Externí Mechanika":            ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Externí Box":                  ("Datová úložiště",             "Externí disky"),\n    "Čtečka Karet":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Čisticí příslušenství":        ("Vysavače a úklid",            "Čisticí příslušenství"),\n    "Pouzdro Na Tablet S Klávesnicí": ("Telefony a tablety",        "Příslušenství"),\n    "Blu":                          ("Televize a video",            "Multimediální přehrávače"),\n    "Popruh Na Kytaru":             ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Obal Na Kytaru":               ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Klavírní Stolička":            ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Bubenická Stolička":           ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Kytarový Efekt":               ("Zvuk a hudba",                "Hudební příslušenství"),\n    "Zásuvka":                      ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Přepínač":                     ("Sítě a konektivita",          "Síťové přepínače"),\n    "Přijímač":                     ("Televize a video",            "Multimediální přehrávače"),\n    "Dac Převodník":                ("Zvuk a hudba",                "Soundbary"),\n    "Baterie a akumulátory":        ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Chladič Pevného Disku":        ("PC komponenty",               "Chlazení"),\n    "Chladič Pevného Disku Pro M.2 2280 Disky": ("PC komponenty",  "Chlazení"),\n    "Řadič":                        ("PC komponenty",               "Ostatní příslušenství"),\n    "Řadič Do Serial Ata":          ("PC komponenty",               "Ostatní příslušenství"),\n    "Řadič Do Usb 3.2 Gen 2 Header":("PC komponenty",              "Ostatní příslušenství"),\n    "Serverová Paměť":              ("PC komponenty",               "RAM"),\n    "Paměťová Karta 128 Gb":        ("Datová úložiště",             "Flash disky"),\n    "Paměťová Karta 256 Gb":        ("Datová úložiště",             "Flash disky"),\n    "Paměťová Karta 512 Gb":        ("Datová úložiště",             "Flash disky"),\n    "Datové Úložiště":              ("Datová úložiště",             "Ostatní úložiště"),\n    "Webkamera S Rozlišením Full Hd (1920 × 1080 Px)": ("Foto a kamery", "Webkamery"),\n    "Konferenční Zařízení":         ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Spínač":                       ("Sítě a konektivita",          "Síťové přepínače"),\n    "Tuner":                        ("Televize a video",            "Multimediální přehrávače"),\n    "Vzdálený Přehrávač":           ("Televize a video",            "Streamovací zařízení"),\n    "Cd Přehrávač":                 ("Televize a video",            "Multimediální přehrávače"),\n    "Handsfree Do Auta":            ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Ochranné Sklo Pro Nintendo Switch": ("Herní technika",         "Herní příslušenství"),\n    "Ochranné Sklo Pro Nintendo Switch 2": ("Herní technika",       "Herní příslušenství"),\n    "Zásuvková Lišta":              ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Přepěťové ochrany":            ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Led Pásek":                    ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Usb Lampička":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Stopky":                       ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Dokovací Stanice Propojující Usb": ("Počítače a notebooky",   "Dokovací stanice"),\n    "Externí Dokovací Stanice":     ("Počítače a notebooky",        "Dokovací stanice"),\n    "Dárková Sada Oficiální Dárkový Set Pro Fanoušky Herní Konzole Playstation": ("Herní technika", "Herní příslušenství"),\n    "Uncategorized":                ("Ostatní",                     "Nezařazeno"),\n    "Ostatní":                      ("Ostatní",                     "Nezařazeno"),\n    "Externí Zvuková Karta":        ("Zvuk a hudba",                "Zvukové karty"),\n    "Příslušenství Pro Hudební Nástroje": ("Zvuk a hudba",          "Hudební příslušenství"),\n    "Počítačový Zdroj 120W":        ("PC komponenty",               "Napájení"),\n    "Počítačový Zdroj 200W":        ("PC komponenty",               "Napájení"),\n    "Rámeček Na Disk":              ("Datová úložiště",             "Ostatní úložiště"),\n    "Zesilovač Pro Pozemní Analogový A Digitální Příjem Tv/Fm Signálů": ("Sítě a konektivita", "Anténní příslušenství"),\n    "Bleskojistka F Konektory":     ("Sítě a konektivita",          "Anténní příslušenství"),\n    "Příslušenství Pro Lokátor Gps Anténa S 5M Pigtailem S Sma Konektorem": ("Sítě a konektivita", "Anténní příslušenství"),\n    "Autentizační Token Univerzální Bezpečnostní Token S Usb": ("Periferie a příslušenství", "Ostatní příslušenství"),\n    "Příslušenství K Ovladači Sada Příslušenství Pro Ovladač Xbox Elite Series 2": ("Herní technika", "Herní příslušenství"),\n    "Příslušenství K Vr Brýlím Ipega Ochranné Krytky Objektivů Pro Playstation Vr2": ("Herní technika", "Herní příslušenství"),\n    "Cestovní Pouzdro":             ("Periferie a příslušenství",   "Ostatní příslušenství"),\n    "Dětský Psací Stůl S Židlí":    ("Kancelář a příslušenství",    "Kancelářské vybavení"),\n    "Zametač Všechny Druhy Podlah": ("Vysavače a úklid",            "Čisticí příslušenství"),\n}\n\n\n# ─────────────────────────────────────────────────────────────────────────────\n# ENGLISH CATEGORY NAMES (original Alza export)\n# ─────────────────────────────────────────────────────────────────────────────\nCATEGORY_MAP.update({\n    "Cables & Hubs":            ("Sítě a konektivita",         "Kabely a rozbočovače"),\n    "Games & Toys":             ("Hry a hračky",               "Hry a hračky"),\n    "Headphones":               ("Zvuk a hudba",               "Sluchátka"),\n    "Laptop Accessories":       ("Počítače a notebooky",       "Příslušenství k notebookům"),\n    "Speakers":                 ("Zvuk a hudba",               "Reproduktory"),\n    "Keyboards":                ("Periferie a příslušenství",  "Klávesnice"),\n    "PC Cases":                 ("PC komponenty",              "PC skříně"),\n    "Kitchen – Ovens & Hobs":   ("Velké domácí spotřebiče",   "Sporáky"),\n    "Refrigerators":            ("Velké domácí spotřebiče",   "Ledničky"),\n    "Graphics Cards":           ("PC komponenty",              "Grafické karty"),\n    "Bags & Backpacks":         ("Kancelář a příslušenství",   "Tašky a batohy"),\n    "External Drives":          ("Datová úložiště",            "Externí disky"),\n    "Digital Cameras":          ("Foto a kamery",              "Fotoaparáty"),\n    "Blenders":                 ("Malé domácí spotřebiče",     "Mixéry a roboty"),\n    "Irons":                    ("Malé domácí spotřebiče",     "Žehličky"),\n    "Kitchen Robots":           ("Malé domácí spotřebiče",     "Mixéry a roboty"),\n    "Toasters":                 ("Malé domácí spotřebiče",     "Toustovače"),\n    "Gaming Headsets":          ("Zvuk a hudba",               "Sluchátka"),\n    "Microwaves":               ("Malé domácí spotřebiče",     "Mikrovlnné trouby"),\n    "Action Cameras":           ("Foto a kamery",              "Akční kamery"),\n    "Robot Vacuums":            ("Vysavače a úklid",           "Robotické vysavače"),\n    "Fitness Trackers":         ("Chytré zařízení",            "Fitness náramky"),\n    "Tablets":                  ("Telefony a tablety",         "Tablety"),\n    "USB Flash Drives":         ("Datová úložiště",            "Flash disky"),\n    "PC Cooling":               ("PC komponenty",              "Chlazení"),\n    "Soundbars":                ("Zvuk a hudba",               "Soundbary"),\n    "Webcams":                  ("Foto a kamery",              "Webkamery"),\n    "Air Purifiers":            ("Chytré zařízení",            "Čističky vzduchu"),\n    "Kettles":                  ("Malé domácí spotřebiče",     "Varné konvice"),\n    "Coffee Machines":          ("Malé domácí spotřebiče",     "Kávovary"),\n    "IP Cameras":               ("Chytré zařízení",            "IP kamery"),\n    "Routers":                  ("Sítě a konektivita",         "Routery"),\n    "Projectors":               ("Televize a video",           "Projektory"),\n    "Game Controllers":         ("Herní technika",             "Herní ovladače"),\n    "Gaming Mice":              ("Herní technika",             "Herní příslušenství"),\n    "Gaming Keyboards":         ("Herní technika",             "Herní příslušenství"),\n    "Smart Home":               ("Chytré zařízení",            "Chytrá domácnost"),\n    "Laptops":                  ("Počítače a notebooky",       "Notebooky"),\n    "NAS":                      ("Datová úložiště",            "NAS úložiště"),\n    "HDD":                      ("Datová úložiště",            "Pevné disky"),\n    "Vacuum Cleaners":          ("Vysavače a úklid",           "Vysavače"),\n    "Smartwatches":             ("Chytré zařízení",            "Chytré hodinky"),\n    "Mice":                     ("Periferie a příslušenství",  "Myši"),\n    "Mobile Phones":            ("Telefony a tablety",         "Mobilní telefony"),\n    "Microphones":              ("Zvuk a hudba",               "Mikrofony"),\n    "Chrániče Sluchu":          ("Zvuk a hudba",               "Sluchátka"),\n    "Chrániče sluchu":          ("Zvuk a hudba",               "Sluchátka"),\n    "Chrániče Sluchu Pro Děti": ("Zvuk a hudba",               "Sluchátka"),\n    "Špunty Do Uší Vhodné Na Koncerty": ("Zvuk a hudba",       "Sluchátka"),\n    "Hardware Peněženka":       ("Periferie a příslušenství",  "Ostatní příslušenství"),\n    "Hardware peněženky":       ("Periferie a příslušenství",  "Ostatní příslušenství"),\n    "Bezpečnostní Zámek":       ("Periferie a příslušenství",  "Ostatní příslušenství"),\n    "Ochranná Fólie":           ("Periferie a příslušenství",  "Ostatní příslušenství"),\n    "Antivibrační Sloupky":     ("PC komponenty",              "Chlazení"),\n    "Příslušenství Pro Pc Skříně": ("PC komponenty",           "PC skříně"),\n    "Střihová Karta Externí":   ("Foto a kamery",              "Akční kamery"),\n    "Záznamové Zařízení Externí": ("Zvuk a hudba",             "Zvukové karty"),\n    "Čistič Koberců":           ("Vysavače a úklid",           "Čisticí příslušenství"),\n})\n\n\n# ─────────────────────────────────────────────────────────────────────────────\n# REGEX FALLBACK for over-specific Czech category names\n# Applied when a category is NOT found in CATEGORY_MAP.\n# Each entry: (MainCategory, Subcategory, compiled regex)\n# ─────────────────────────────────────────────────────────────────────────────\nREGEX_RULES = [\n    # PC komponenty\n    ("PC komponenty",              "Flash disky",               re.compile(r'^Flash Disk \\d', re.I)),\n    ("PC komponenty",              "Chlazení",                  re.compile(r'^Ventilátor Do Pc\\b', re.I)),\n    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chladič Na Procesor\\b', re.I)),\n    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chladič Pevného Disku\\b', re.I)),\n    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chránič Ventilátorů\\b', re.I)),\n    ("PC komponenty",              "Chlazení",                  re.compile(r'^PC Cooling\\b', re.I)),\n    ("PC komponenty",              "Napájení",                  re.compile(r'^Počítačový Zdroj\\b', re.I)),\n    ("PC komponenty",              "Procesory",                 re.compile(r'^Procesor \\d+', re.I)),\n    ("PC komponenty",              "Základní desky",            re.compile(r'^Základní Deska\\b', re.I)),\n    ("PC komponenty",              "Napájení",                  re.compile(r'^Zdroj \\d+W\\b', re.I)),\n    ("PC komponenty",              "Ostatní příslušenství",     re.compile(r'^Řadič Do Pcie\\b', re.I)),\n    ("PC komponenty",              "Mini počítače",             re.compile(r'^(Mini Počítač|Raspberry Pi|Pouzdro Na Minipočítač)', re.I)),\n\n    # Datová úložiště\n    ("Datová úložiště",            "Flash disky",               re.compile(r'^Flash Disk\\b', re.I)),\n    ("Datová úložiště",            "Flash disky",               re.compile(r'^Flash Disk', re.I)),\n    ("Datová úložiště",            "Pevné disky",               re.compile(r'^Pevný Disk\\b', re.I)),\n    ("Datová úložiště",            "Pevné disky",               re.compile(r'^Pevný Disk', re.I)),\n    ("Datová úložiště",            "Externí disky",             re.compile(r'^Externí Disk\\b', re.I)),\n    ("Datová úložiště",            "Ostatní úložiště",          re.compile(r'^Rámeček Na Disk\\b', re.I)),\n\n    # Sítě a konektivita\n    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Konektor Typu\\b', re.I)),\n    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Keystone\\b', re.I)),\n    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Rozbočovač\\b', re.I)),\n    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Zásuvka\\b', re.I)),\n    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Switch\\b', re.I)),\n    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Přepínač\\b', re.I)),\n    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Přepínač Datový\\b', re.I)),\n    ("Sítě a konektivita",         "Extendery",                 re.compile(r'^Extender\\b', re.I)),\n    ("Sítě a konektivita",         "Anténní příslušenství",     re.compile(r'^Zesilovač Pro', re.I)),\n\n    # Vysavače a úklid\n    ("Vysavače a úklid",           "Robotické vysavače",        re.compile(r'^Robotický Vysavač\\b', re.I)),\n    ("Vysavače a úklid",           "Tyčové vysavače",           re.compile(r'^Tyčový Vysavač\\b', re.I)),\n    ("Vysavače a úklid",           "Vysavače",                  re.compile(r'^(Bezsáčkový|Sáčkový|Ruční|Průmyslový|Autovysavač|Vysavač Popela)\\b', re.I)),\n    ("Vysavače a úklid",           "Vysavače",                  re.compile(r'Vysavač', re.I)),\n    ("Vysavače a úklid",           "Čisticí příslušenství",     re.compile(r'^Zametač\\b', re.I)),\n\n    # Herní technika\n    ("Herní technika",             "Herní ovladače",            re.compile(r'^Gamepad\\b', re.I)),\n    ("Herní technika",             "Herní ovladače",            re.compile(r'^Herní Ovladač\\b', re.I)),\n    ("Herní technika",             "Herní ovladače",            re.compile(r'^Volant\\b', re.I)),\n    ("Herní technika",             "Herní sedačky",             re.compile(r'^Herní (Závodní Sedačka|Křeslo|Sedačka)\\b', re.I)),\n    ("Herní technika",             "Závodní příslušenství",     re.compile(r'^Stojan Na Volant\\b', re.I)),\n    ("Herní technika",             "Herní příslušenství",       re.compile(r'^(Obal Na Nintendo|Stojan Na Herní|Gripy Na Ovladač|Streamdeck|RGB Příslušenství)\\b', re.I)),\n    ("Herní technika",             "Herní konzole",             re.compile(r'^Herní Konzole\\b', re.I)),\n    ("Herní technika",             "Herní příslušenství",       re.compile(r'^Stojan Na Herní Konzoli\\b', re.I)),\n    ("Herní technika",             "Herní příslušenství",       re.compile(r'^Obal Na (Ovladač|Klávesy)\\b', re.I)),\n\n    # Zvuk a hudba\n    ("Zvuk a hudba",               "Reproduktory",              re.compile(r'^Reproduktor\\b', re.I)),\n    ("Zvuk a hudba",               "Soundbary",                 re.compile(r'^Subwoofer\\b', re.I)),\n    ("Zvuk a hudba",               "Rádia a Hi-Fi",             re.compile(r'^(Radiomagnetofon|Rádio|Mikrosystém|Minisystém|Multimediální Centrum)\\b', re.I)),\n    ("Zvuk a hudba",               "Hudební nástroje",          re.compile(r'^(Klávesy|Midi Klávesy|Syntezátor|Digitální Piano|Ukulele|Perkuse|Kazoo|Foukací Harmonika|Zobcová Flétna|Kombo)\\b', re.I)),\n    ("Zvuk a hudba",               "Hudební příslušenství",     re.compile(r'^(Stojan Na (Kytaru|Noty|Klávesy)|Trsátko|Struny|Kapodastr|Ladička|Lampička Na Noty|Paličky Na Bicí|Metronom|Příslušenství Pro Hudební)\\b', re.I)),\n    ("Zvuk a hudba",               "Gramofony",                 re.compile(r'^Gramofon\\b', re.I)),\n    ("Zvuk a hudba",               "Zvukové karty",             re.compile(r'^(Dac Převodník|Dac/Amp|Zvuková Karta)\\b', re.I)),\n\n    # Televize a video\n    ("Televize a video",           "Multimediální přehrávače",  re.compile(r'^(Blu|Dvd Přehrávač|Mp4 Přehrávač|Síťový Přehrávač|Video Grabber|Multimediální Centrum)\\b', re.I)),\n\n    # Kancelář a příslušenství\n    ("Kancelář a příslušenství",   "Kancelářské vybavení",      re.compile(r'^(Kancelářská Židle|Kancelářské Křeslo|Stojan Na Pc|Držák Na Pc|Dětský Psací Stůl|Dětská Židle)\\b', re.I)),\n    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^(Nabíječka Do Sítě|Přepěťová Ochrana|Rgb Příslušenství|Stolní Lampa|Lampička)\\b', re.I)),\n\n    # Telefony a tablety\n    ("Telefony a tablety",         "Příslušenství",             re.compile(r'^(Držák Na Mobil|Pouzdro Na Tablet|Obal Na Tablet)\\b', re.I)),\n    ("Telefony a tablety",         "Ostatní",                   re.compile(r'^Dobíjecí (Karta|Stanice)\\b', re.I)),\n    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^Externí Vypalovačka\\b', re.I)),\n    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^Příslušenství Pro Pc Skříně\\b', re.I)),\n    ("Vysavače a úklid",           "Čisticí příslušenství",     re.compile(r'^Čistič Koberců\\b', re.I)),\n]\n\n\n# ─────────────────────────────────────────────────────────────────────────────\n# NAME-BASED DETECTION for "Home Appliances" products\n# ─────────────────────────────────────────────────────────────────────────────\n\n# Phone brands / model patterns — match = Mobilní telefony\nPHONE_RE = re.compile(\n    r'\\biphone\\b'\n    r'|\\bsamsung galaxy [a-z]'\n    r'|\\bgalaxy (z|a|s|m|f)\\d'\n    r'|\\bgalaxy fold\\b|\\bgalaxy flip\\b'\n    r'|\\boneplus\\b'\n    r'|\\bgoogle pixel\\b'\n    r'|\\brealme\\b'\n    r'|\\baligator\\b'\n    r'|\\bulefone\\b'\n    r'|\\bmotorola moto\\b'\n    r'|\\bhonor \\d'\n    r'|\\bhuawei (p|mate|nova)\\d'\n    r'|\\bxiaomi [0-9]'\n    r'|\\bxiaomi redmi\\b|\\bredmi\\b'\n    r'|\\bnokia [gcgt]\\d'\n    r'|\\boppo (a|find|reno)\\d'\n    r'|\\bsony xperia\\b',\n    re.IGNORECASE\n)\n\n# Tablet patterns — match = Tablety\nTABLET_RE = re.compile(\n    r'\\bipad\\b'\n    r'|\\bsamsung tab\\b|\\bgalaxy tab\\b'\n    r'|\\bxiaomi pad\\b|\\blenovo tab\\b'\n    r'|\\bhuawei matepad\\b'\n    r'|\\bumax u-one\\b',\n    re.IGNORECASE\n)\n\n# Gaming handheld — match = Herní konzole\nHANDHELD_RE = re.compile(\n    r'\\bmsi claw\\b|\\bsteam deck\\b|\\basus rog ally\\b',\n    re.IGNORECASE\n)\n\n# Appliance sub-rules for remaining \"Home Appliances\"\n# Each entry: (MainCategory, Subcategory), regex pattern\nAPPLIANCE_RULES = [\n    (("Vysavače a úklid",           "Robotické vysavače"),    re.compile(r'\\brobot\\b|\\broomba\\b', re.I)),\n    (("Vysavače a úklid",           "Tyčové vysavače"),       re.compile(r'\\btyčov[áy]\\b|\\baquatrio\\b|\\baquaforce\\b|\\bhandy force\\b|\\bhandy\\b|\\bfreedom\\b', re.I)),\n    (("Vysavače a úklid",           "Vysavače"),              re.compile(r'\\bvysava[cč]\\b|\\bcyclone\\b|\\bturbovac\\b|\\bbbhf\\b|\\baquawash\\b|\\bh-energy\\b|\\bhe\\d{3}\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Pračky"),                re.compile(r'\\bpra[cč]k[ay]\\b|\\bwf[0-9]\\b|\\bww\\d\\b|\\bwashing machine\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Myčky nádobí"),          re.compile(r'\\bmy[cč]k[ay]\\b|\\bdishwash\\b|\\bbdin\\b|\\bbdfn\\b|\\bgi67\\b|\\bsgr-dw\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Ledničky"),              re.compile(r'\\bledni[cč]k\\b|\\brcna\\b|\\bnrc6\\b|\\bfridge\\b|\\brefrigerator\\b|\\bamerická\\b|\\bb5rcna\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Mrazáky"),               re.compile(r'\\bmrazák\\b|\\bfreezer\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Sušičky prádla"),        re.compile(r'\\bsu[sš]i[cč]k[ay]\\b|\\bdryer\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Sporáky"),               re.compile(r'\\bsporák\\b|\\brange\\b', re.I)),\n    (("Velké domácí spotřebiče",    "Trouby"),                re.compile(r'\\btroub[ay]\\b|\\boven\\b|\\bim 6435\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Kávovary"),              re.compile(r'\\bkávovar\\b|\\bcoffee\\b|\\bespresso\\b|\\bnanopresso\\b|\\bnespresso\\b|\\bdolce\\b|\\bbarista\\b|\\bka\\s?5[0-9]{3}\\b|\\bke 550\\b|\\bnk2w\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Varné konvice"),         re.compile(r'\\bkonvic\\b|\\bkettle\\b|\\bwatercooker\\b|\\bphwk\\b|\\brk-0\\b|\\brohnson r-7\\b|\\bcatler ke\\b|\\bphilco ph\\b|\\beta.*adagio\\b|\\borava.*retro konvice\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Mixéry a roboty"),       re.compile(r'\\bmixér\\b|\\bblender\\b|\\bkitchen.*robot\\b|\\bfoodprocessor\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Parní čističe"),         re.compile(r'\\bparní\\b|\\bsteam clean\\b|\\bpáry\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Ventilátory"),           re.compile(r'\\baerostar\\b|\\bventilátor\\b|\\bfan\\b|\\bair.*cooler\\b|\\btesla.*t[57]\\d{2}\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Žehličky"),              re.compile(r'\\bžehli[cč]k\\b|\\biron\\b', re.I)),\n    (("Malé domácí spotřebiče",     "Fény a stylingové přístroje"), re.compile(r'\\bfén\\b|\\bhair.*dryer\\b|\\bstyling\\b|\\bsencor shd\\b', re.I)),\n]\n\n\ndef classify_home_appliance(name: str) -> tuple:\n    """\n    Given a product name from the 'Home Appliances' bucket, return\n    (MainCategory, Subcategory).  Falls back to Ostatní if nothing matches.\n    """\n    if PHONE_RE.search(name):\n        return ("Telefony a tablety", "Mobilní telefony")\n    if TABLET_RE.search(name):\n        return ("Telefony a tablety", "Tablety")\n    if HANDHELD_RE.search(name):\n        return ("Herní technika", "Herní konzole")\n    for (main, sub), pattern in APPLIANCE_RULES:\n        if pattern.search(name):\n            return (main, sub)\n    # Generic fallback for genuine appliances we couldn't classify more specifically\n    return ("Malé domácí spotřebiče", "Ostatní spotřebiče")\n\n\ndef classify_product(name: str, current_cat: str) -> tuple:\n    \"\"\"Return (MainCategory, Subcategory) for a given product.\"\"\"\n    if current_cat == \"Home Appliances\":\n        return classify_home_appliance(name)\n    # 1. Exact match in CATEGORY_MAP\n    if current_cat in CATEGORY_MAP:\n        return CATEGORY_MAP[current_cat]\n    # 2. Regex fallback for over-specific Czech categories\n    for main, sub, pattern in REGEX_RULES:\n        if pattern.search(current_cat):\n            return (main, sub)\n    # 3. Nothing matched\n    return (\"Ostatní\", current_cat or \"Nezařazeno\")\n\n\n# ─────────────────────────────────────────────────────────────────────────────\n# Main\n# ─────────────────────────────────────────────────────────────────────────────\n\ndef run():\n    import shutil, tempfile\n\n    if not os.path.exists(DB_PATH):\n        print(f\"✗  Database not found at {DB_PATH}\")\n        sys.exit(1)\n\n    # The DB lives on a FUSE-mounted filesystem that doesn't support SQLite WAL.\n    # Work on a /tmp copy, then write back.\n    tmp = \"/tmp/qualitydb_restructure3.db\"; import subprocess; subprocess.run([\"chmod\", \"644\", tmp], capture_output=True)\n    shutil.copy2(DB_PATH, tmp)\n    print(f\"Working on copy: {tmp}\")\n\n    conn = sqlite3.connect(tmp)\n    conn.row_factory = sqlite3.Row\n\n    # Add MainCategory column if missing\n    existing_cols = {r[1] for r in conn.execute(\"PRAGMA table_info(products)\").fetchall()}\n    if \"MainCategory\" not in existing_cols:\n        if DRY_RUN:\n            print(\"[dry-run] Would ALTER TABLE products ADD COLUMN MainCategory TEXT\")\n        else:\n            conn.execute(\"ALTER TABLE products ADD COLUMN MainCategory TEXT\")\n            print(\"✓  Added MainCategory column\")\n\n    rows = conn.execute(\"SELECT ProductURL, Name, Category FROM products\").fetchall()\n    print(f\"Processing {len(rows):,} products…\\n\")\n\n    updates = []           # (main_cat, new_sub, product_url)\n    skipped_unmapped = defaultdict(int)\n\n    for row in rows:\n        url  = row[\"ProductURL\"] or \"\"\n        name = row[\"Name\"] or \"\"\n        cat  = row[\"Category\"] or \"\"\n\n        main_cat, new_sub = classify_product(name, cat)\n        updates.append((main_cat, new_sub, url, cat))\n        if main_cat == \"Ostatní\":\n            skipped_unmapped[cat] += 1\n\n    # ── Summary before writing ────────────────────────────────────────────────\n    main_counts = defaultdict(int)\n    sub_changes = defaultdict(int)\n    home_fixed  = 0\n\n    for main, sub, url, old_cat in updates:\n        main_counts[main] += 1\n        if old_cat == \"Home Appliances\" and main != \"Malé domácí spotřebiče\":\n            home_fixed += 1\n        if sub != old_cat:\n            sub_changes[f\"{old_cat} → {sub}\"] += 1\n\n    print(\"=== Proposed MainCategory distribution ===")\n    for cat, cnt in sorted(main_counts.items(), key=lambda x: -x[1]):\n        print(f\"  {cnt:>5}  {cat}\")\n\n    print(f\"\\n  Phones/tablets rescued from Home Appliances: {home_fixed}\")\n\n    if skipped_unmapped:\n        print(f\"\\n  Categories → 'Ostatní' (no mapping found):\")\n        for cat, cnt in sorted(skipped_unmapped.items(), key=lambda x: -x[1])[:20]:\n            print(f\"    {cnt:>4}  {cat!r}\")\n\n    if DRY_RUN:\n        print(\"\\n[dry-run] No changes written.\")\n        conn.close()\n        return\n\n    # ── Apply updates ─────────────────────────────────────────────────────────\n    print(\"\\nWriting updates…\")\n    cur = conn.cursor()\n    for main_cat, new_sub, url, _old_cat in updates:\n        if url:\n            cur.execute(\n                \"UPDATE products SET MainCategory=?, Category=? WHERE ProductURL=?\",\n                (main_cat, new_sub, url)\n            )\n        else:\n            # For products without a URL (rare), match by name+old_category\n            cur.execute(\n                \"UPDATE products SET MainCategory=?, Category=? WHERE Name=? AND Category=?\",\n                (main_cat, new_sub, _old_cat, _old_cat)\n            )\n\n    conn.commit()\n\n    # Verify\n    total = conn.execute(\"SELECT COUNT(*) FROM products\").fetchone()[0]\n    mapped = conn.execute(\"SELECT COUNT(*) FROM products WHERE MainCategory IS NOT NULL\").fetchone()[0]\n    print(f\"\\n✓  Done. {mapped:,}/{total:,} products have MainCategory set.\")\n\n    print(\"\\n=== Final MainCategory counts ===")\n    for row in conn.execute(\n        \"SELECT MainCategory, COUNT(*) FROM products GROUP BY MainCategory ORDER BY COUNT(*) DESC\"\n    ).fetchall():\n        print(f\"  {row[1]:>5}  {row[0]}\")\n\n    conn.close()\n\n    if not DRY_RUN:\n        shutil.copy2(tmp, DB_PATH)\n        print(f\"\\n✓  Copied updated DB back to {DB_PATH}\")\n    os.remove(tmp)\n\n\nif __name__ == \"__main__\":\n    run()\n
+"""restructure_categories.py — QualityDB
+
+Adds a MainCategory column to products.db and maps every product to one of
+16 main categories + a cleaned subcategory.  Also fixes the most common
+misclassification: phones/tablets landing in "Home Appliances", and ensures
+bags/backpacks and office furniture are in "Kancelář a příslušenství"
+rather than "Počítače a notebooky".
+
+Run:
+    python3 restructure_categories.py            # live run
+    python3 restructure_categories.py --dry-run  # preview only (no writes)
+"""
+
+import sqlite3
+import re
+import os
+import sys
+from collections import defaultdict
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "products.db")
+DRY_RUN = "--dry-run" in sys.argv
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CATEGORY MAP  (current Category value → (MainCategory, new Subcategory))
+# ─────────────────────────────────────────────────────────────────────────────
+CATEGORY_MAP = {
+    # ── Telefony a tablety ────────────────────────────────────────────────────
+    "Mobilní telefony":             ("Telefony a tablety",          "Mobilní telefony"),
+    "Mobile Phones":                ("Telefony a tablety",          "Mobilní telefony"),
+    "Tablet":                       ("Telefony a tablety",          "Tablety"),
+    "Tablety":                      ("Telefony a tablety",          "Tablety"),
+    "Tablets":                      ("Telefony a tablety",          "Tablety"),
+
+    # ── Počítače a notebooky ───────────────────────────────────────────────────
+    "Notebooky":                    ("Počítače a notebooky",        "Notebooky"),
+    "Monitory":                     ("Počítače a notebooky",        "Monitory"),
+    "Monitors":                     ("Počítače a notebooky",        "Monitory"),
+    "Příslušenství k notebookům":   ("Počítače a notebooky",        "Příslušenství k notebookům"),
+    "Laptop Accessories":           ("Počítače a notebooky",        "Příslušenství k notebookům"),
+    "Mini počítače":                ("Počítače a notebooky",        "Mini počítače"),
+    "Dokovací Stanice":             ("Počítače a notebooky",        "Dokovací stanice"),
+
+    # ── Kancelář a příslušenství ──────────────────────────────────────────────
+    # Moved out of "Počítače a notebooky" — bags/furniture aren't computers
+    "Kancelářské vybavení":         ("Kancelář a příslušenství",    "Kancelářské vybavení"),
+    "Tašky a batohy":               ("Kancelář a příslušenství",    "Tašky a batohy"),
+    "Bags & Backpacks":             ("Kancelář a příslušenství",    "Tašky a batohy"),
+
+    # ── PC komponenty ─────────────────────────────────────────────────────────
+    "Grafické karty":               ("PC komponenty",               "Grafické karty"),
+    "Procesory":                    ("PC komponenty",               "Procesory"),
+    "RAM":                          ("PC komponenty",               "RAM"),
+    "Základní desky":               ("PC komponenty",               "Základní desky"),
+    "PC skříně":                    ("PC komponenty",               "PC skříně"),
+    "Chlazení procesorů":           ("PC komponenty",               "Chlazení"),
+    "Napájení":                     ("PC komponenty",               "Napájení"),
+
+    # ── Herní technika ────────────────────────────────────────────────────────
+    "Herní Konzole":                ("Herní technika",              "Herní konzole"),
+    "Herní příslušenství":          ("Herní technika",              "Herní příslušenství"),
+    "Herní ovladače":               ("Herní technika",              "Herní ovladače"),
+    "Závodní příslušenství":        ("Herní technika",              "Závodní příslušenství"),
+    "Herní Židle":                  ("Herní technika",              "Herní sedačky"),
+    "Herní sedačky":                ("Herní technika",              "Herní sedačky"),
+    "Herní Křeslo":                 ("Herní technika",              "Herní sedačky"),
+    "Gaming Keyboards":             ("Herní technika",              "Herní příslušenství"),
+    "Herní klávesnice":             ("Herní technika",              "Herní příslušenství"),
+    "Gaming Mice":                  ("Herní technika",              "Herní příslušenství"),
+    "Herní myši":                   ("Herní technika",              "Herní příslušenství"),
+
+    # ── PC komponenty (additional) ────────────────────────────────────────────
+    "Chlazení":                     ("PC komponenty",               "Chlazení"),
+    "Zvukové karty":                ("Zvuk a hudba",                "Zvukové karty"),
+
+    # ── Datová úložiště (additional) ─────────────────────────────────────────
+    "SSD disky":                    ("Datová úložiště",             "SSD"),
+
+    # ── Počítače a notebooky (additional) ────────────────────────────────────
+    "Dokovací stanice":             ("Počítače a notebooky",        "Dokovací stanice"),
+
+    # ── Zvuk a hudba ─────────────────────────────────────────────────────────
+    "Rádia a Hi-Fi":                ("Zvuk a hudba",                "Rádia a Hi-Fi"),
+    "Sluchátka":                    ("Zvuk a hudba",                "Sluchátka"),
+    "Headphones":                   ("Zvuk a hudba",                "Sluchátka"),
+    "Gaming Headsets":              ("Zvuk a hudba",                "Sluchátka"),
+    "Herní sluchátka":              ("Zvuk a hudba",                "Sluchátka"),
+    "Chrániče sluchu":              ("Zvuk a hudba",                "Sluchátka"),
+    "Bluetooth Headset":            ("Zvuk a hudba",                "Sluchátka"),
+    "Reproduktory":                 ("Zvuk a hudba",                "Reproduktory"),
+    "Speakers":                     ("Zvuk a hudba",                "Reproduktory"),
+    "Reproduktor":                  ("Zvuk a hudba",                "Reproduktory"),
+    "Reprosoustava":                ("Zvuk a hudba",                "Reproduktory"),
+    "Soundbary":                    ("Zvuk a hudba",                "Soundbary"),
+    "Soundbars":                    ("Zvuk a hudba",                "Soundbary"),
+    "Subwoofer":                    ("Zvuk a hudba",                "Soundbary"),
+    "Mikrofony":                    ("Zvuk a hudba",                "Mikrofony"),
+    "Hudební nástroje":             ("Zvuk a hudba",                "Hudební nástroje"),
+    "Hudební příslušenství":        ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Gramofony":                    ("Zvuk a hudba",                "Gramofony"),
+    "Rádia":                        ("Zvuk a hudba",                "Rádia a Hi-Fi"),
+    "Mikrosystémy":                 ("Zvuk a hudba",                "Rádia a Hi-Fi"),
+    "Digitální Piano":              ("Zvuk a hudba",                "Hudební nástroje"),
+
+    # ── Televize a video ──────────────────────────────────────────────────────
+    "Televize":                     ("Televize a video",            "Televize"),
+    "TVs":                          ("Televize a video",            "Televize"),
+    "Projektory":                   ("Televize a video",            "Projektory"),
+    "Projectors":                   ("Televize a video",            "Projektory"),
+    "Streamovací zařízení":         ("Televize a video",            "Streamovací zařízení"),
+    "Multimediální přehrávače":     ("Televize a video",            "Multimediální přehrávače"),
+
+    # ── Velké domácí spotřebiče ───────────────────────────────────────────────
+    "Pračky":                       ("Velké domácí spotřebiče",     "Pračky"),
+    "Sušičky prádla":               ("Velké domácí spotřebiče",     "Sušičky prádla"),
+    "Ledničky":                     ("Velké domácí spotřebiče",     "Ledničky"),
+    "Americké ledničky":            ("Velké domácí spotřebiče",     "Ledničky"),
+    "Mrazáky":                      ("Velké domácí spotřebiče",     "Mrazáky"),
+    "Myčky nádobí":                 ("Velké domácí spotřebiče",     "Myčky nádobí"),
+    "Sporáky":                      ("Velké domácí spotřebiče",     "Sporáky"),
+    "Trouby":                       ("Velké domácí spotřebiče",     "Trouby"),
+
+    # ── Malé domácí spotřebiče ────────────────────────────────────────────────
+    "Kávovary":                     ("Malé domácí spotřebiče",      "Kávovary"),
+    "Coffee Machines":              ("Malé domácí spotřebiče",      "Kávovary"),
+    "Varné konvice":                ("Malé domácí spotřebiče",      "Varné konvice"),
+    "Kettles":                      ("Malé domácí spotřebiče",      "Varné konvice"),
+    "Mixéry a roboty":              ("Malé domácí spotřebiče",      "Mixéry a roboty"),
+    "Kitchen Robots":               ("Malé domácí spotřebiče",      "Mixéry a roboty"),
+    "Blenders":                     ("Malé domácí spotřebiče",      "Mixéry a roboty"),
+    "Toustovače":                   ("Malé domácí spotřebiče",      "Toustovače"),
+    "Toasters":                     ("Malé domácí spotřebiče",      "Toustovače"),
+    "Mikrovlnné trouby":            ("Malé domácí spotřebiče",      "Mikrovlnné trouby"),
+    "Microwaves":                   ("Malé domácí spotřebiče",      "Mikrovlnné trouby"),
+    "Žehličky":                     ("Malé domácí spotřebiče",      "Žehličky"),
+    "Irons":                        ("Malé domácí spotřebiče",      "Žehličky"),
+    "Fény a stylingové přístroje":  ("Malé domácí spotřebiče",      "Fény a stylingové přístroje"),
+    "Fritézy":                      ("Malé domácí spotřebiče",      "Fritézy"),
+    "Ventilátory":                  ("Malé domácí spotřebiče",      "Ventilátory"),
+    "Parní čističe":                ("Malé domácí spotřebiče",      "Parní čističe"),
+    "Epilátory a holicí strojky":   ("Malé domácí spotřebiče",      "Péče o tělo"),
+
+    # ── Vysavače a úklid ──────────────────────────────────────────────────────
+    "Vysavače":                     ("Vysavače a úklid",            "Vysavače"),
+    "Vacuum Cleaners":              ("Vysavače a úklid",            "Vysavače"),
+    "Tyčové vysavače":              ("Vysavače a úklid",            "Tyčové vysavače"),
+    "Robotické vysavače":           ("Vysavače a úklid",            "Robotické vysavače"),
+    "Robot Vacuums":                ("Vysavače a úklid",            "Robotické vysavače"),
+
+    # ── Chytré zařízení ───────────────────────────────────────────────────────
+    "Chytré hodinky":               ("Chytré zařízení",             "Chytré hodinky"),
+    "Smartwatches":                 ("Chytré zařízení",             "Chytré hodinky"),
+    "Fitness Náramek":              ("Chytré zařízení",             "Fitness náramky"),
+    "Fitness náramky":              ("Chytré zařízení",             "Fitness náramky"),
+    "Fitness Trackers":             ("Chytré zařízení",             "Fitness náramky"),
+    "Čističky vzduchu":             ("Chytré zařízení",             "Čističky vzduchu"),
+    "Air Purifiers":                ("Chytré zařízení",             "Čističky vzduchu"),
+    "Chytrá domácnost":             ("Chytré zařízení",             "Chytrá domácnost"),
+    "Smart Home":                   ("Chytré zařízení",             "Chytrá domácnost"),
+    "IP kamery":                    ("Chytré zařízení",             "IP kamery"),
+    "IP Cameras":                   ("Chytré zařízení",             "IP kamery"),
+
+    # ── Foto a kamery ─────────────────────────────────────────────────────────
+    "Fotoaparáty":                  ("Foto a kamery",               "Fotoaparáty"),
+    "Digital Cameras":              ("Foto a kamery",               "Fotoaparáty"),
+    "Akční kamery":                 ("Foto a kamery",               "Akční kamery"),
+    "Action Cameras":               ("Foto a kamery",               "Akční kamery"),
+    "Webkamery":                    ("Foto a kamery",               "Webkamery"),
+    "Webcams":                      ("Foto a kamery",               "Webkamery"),
+
+    # ── Datová úložiště ───────────────────────────────────────────────────────
+    "SSD":                          ("Datová úložiště",             "SSD"),
+    "Pevné disky":                  ("Datová úložiště",             "Pevné disky"),
+    "HDD":                          ("Datová úložiště",             "Pevné disky"),
+    "Flash disky":                  ("Datová úložiště",             "Flash disky"),
+    "USB Flash Drives":             ("Datová úložiště",             "Flash disky"),
+    "Externí disky":                ("Datová úložiště",             "Externí disky"),
+    "NAS úložiště":                 ("Datová úložiště",             "NAS úložiště"),
+
+    # ── Sítě a konektivita ────────────────────────────────────────────────────
+    "Kabely a rozbočovače":         ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Rozbočovače":                  ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Konektory a adaptéry":         ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Routery":                      ("Sítě a konektivita",          "Routery"),
+    "Routers":                      ("Sítě a konektivita",          "Routery"),
+    "Síťové přepínače":             ("Sítě a konektivita",          "Síťové přepínače"),
+    "Síťové komponenty":            ("Sítě a konektivita",          "Síťové komponenty"),
+    "Síťová Karta":                 ("Sítě a konektivita",          "Síťové komponenty"),
+    "Extendery":                    ("Sítě a konektivita",          "Extendery"),
+    "Anténní příslušenství":        ("Sítě a konektivita",          "Anténní příslušenství"),
+    "Síťová karta":                 ("Sítě a konektivita",          "Síťové komponenty"),
+
+    # ── Periferie a příslušenství ─────────────────────────────────────────────
+    "Myši":                         ("Periferie a příslušenství",   "Myši"),
+    "Mice":                         ("Periferie a příslušenství",   "Myši"),
+    "Trackball":                    ("Periferie a příslušenství",   "Myši"),
+    "Trackpad":                     ("Periferie a příslušenství",   "Myši"),
+    "Klávesnice":                   ("Periferie a příslušenství",   "Klávesnice"),
+    "Keyboards":                    ("Periferie a příslušenství",   "Klávesnice"),
+    "Brýle Na Počítač":             ("Periferie a příslušenství",   "Brýle na počítač"),
+    "Brýle na počítač":             ("Periferie a příslušenství",   "Brýle na počítač"),
+    "Ostatní příslušenství":        ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Příslušenství":                ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Phone Chargers":               ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Přepěťové ochrany":            ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Dobíjecí Stanice":             ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Dobíjecí Karta":               ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Hardware peněženky":           ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Autentizační Token":           ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Bezpečnostní zámky":           ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Stolní lampy":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Držáky":                       ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "PC příslušenství":             ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Dotykové Pero (Stylus)":       ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Ochranné Sklo":                ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Ochranná skla a fólie":        ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Kancelářské Křeslo":           ("Kancelář a příslušenství",    "Kancelářské vybavení"),
+    "Herní příslušenství":          ("Herní technika",              "Herní příslušenství"),
+
+    # ── Hry a hračky ─────────────────────────────────────────────────────────
+    "Hry a hračky":                 ("Hry a hračky",                "Hry a hračky"),
+    "Hry":                          ("Hry a hračky",                "Hry"),
+    "Hra Na Pc A Xbox":             ("Hry a hračky",                "Hry"),
+    "Hra Na Pc":                    ("Hry a hračky",                "Hry"),
+    "Herní Doplněk / Dlc":          ("Hry a hračky",                "Hry"),
+    "Karetní Hra":                  ("Hry a hračky",                "Hry a hračky"),
+    "Příslušenství K Ovladači":     ("Herní technika",              "Herní příslušenství"),
+    "Závodní příslušenství":        ("Herní technika",              "Závodní příslušenství"),
+    "Sada Herního Příslušenství":   ("Herní technika",              "Herní příslušenství"),
+    "Kryt Na Herní Konzoli":        ("Herní technika",              "Herní příslušenství"),
+    "Brašna Pro Xbox Series S/X":   ("Herní technika",              "Herní příslušenství"),
+    "Gamepad":                      ("Herní technika",              "Herní ovladače"),
+    "Obal Na Ovladač":              ("Herní technika",              "Herní příslušenství"),
+
+    # ── Zbývající → správné kategorie ────────────────────────────────────────
+    "Externí vypalovačky":          ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Externí Mechanika":            ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Externí Box":                  ("Datová úložiště",             "Externí disky"),
+    "Čtečka Karet":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Čisticí příslušenství":        ("Vysavače a úklid",            "Čisticí příslušenství"),
+    "Pouzdro Na Tablet S Klávesnicí": ("Telefony a tablety",        "Příslušenství"),
+    "Blu":                          ("Televize a video",            "Multimediální přehrávače"),
+    "Popruh Na Kytaru":             ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Obal Na Kytaru":               ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Klavírní Stolička":            ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Bubenická Stolička":           ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Kytarový Efekt":               ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Zásuvka":                      ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Přepínač":                     ("Sítě a konektivita",          "Síťové přepínače"),
+    "Přijímač":                     ("Televize a video",            "Multimediální přehrávače"),
+    "Dac Převodník":                ("Zvuk a hudba",                "Soundbary"),
+    "Baterie a akumulátory":        ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Chladič Pevného Disku":        ("PC komponenty",               "Chlazení"),
+    "Chladič Pevného Disku Pro M.2 2280 Disky": ("PC komponenty",  "Chlazení"),
+    "Řadič":                        ("PC komponenty",               "Ostatní příslušenství"),
+    "Řadič Do Serial Ata":          ("PC komponenty",               "Ostatní příslušenství"),
+    "Řadič Do Usb 3.2 Gen 2 Header":("PC komponenty",              "Ostatní příslušenství"),
+    "Serverová Paměť":              ("PC komponenty",               "RAM"),
+    "Paměťová Karta 128 Gb":        ("Datová úložiště",             "Flash disky"),
+    "Paměťová Karta 256 Gb":        ("Datová úložiště",             "Flash disky"),
+    "Paměťová Karta 512 Gb":        ("Datová úložiště",             "Flash disky"),
+    "Datové Úložiště":              ("Datová úložiště",             "Ostatní úložiště"),
+    "Webkamera S Rozlišením Full Hd (1920 × 1080 Px)": ("Foto a kamery", "Webkamery"),
+    "Konferenční Zařízení":         ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Spínač":                       ("Sítě a konektivita",          "Síťové přepínače"),
+    "Tuner":                        ("Televize a video",            "Multimediální přehrávače"),
+    "Vzdálený Přehrávač":           ("Televize a video",            "Streamovací zařízení"),
+    "Cd Přehrávač":                 ("Televize a video",            "Multimediální přehrávače"),
+    "Handsfree Do Auta":            ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Ochranné Sklo Pro Nintendo Switch": ("Herní technika",         "Herní příslušenství"),
+    "Ochranné Sklo Pro Nintendo Switch 2": ("Herní technika",       "Herní příslušenství"),
+    "Zásuvková Lišta":              ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Led Pásek":                    ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Usb Lampička":                 ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Stopky":                       ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Dokovací Stanice Propojující Usb": ("Počítače a notebooky",   "Dokovací stanice"),
+    "Externí Dokovací Stanice":     ("Počítače a notebooky",        "Dokovací stanice"),
+    "Dárková Sada Oficiální Dárkový Set Pro Fanoušky Herní Konzole Playstation": ("Herní technika", "Herní příslušenství"),
+    "Uncategorized":                ("Ostatní",                     "Nezařazeno"),
+    "Ostatní":                      ("Ostatní",                     "Nezařazeno"),
+    "Externí Zvuková Karta":        ("Zvuk a hudba",                "Zvukové karty"),
+    "Příslušenství Pro Hudební Nástroje": ("Zvuk a hudba",          "Hudební příslušenství"),
+    "Počítačový Zdroj 120W":        ("PC komponenty",               "Napájení"),
+    "Počítačový Zdroj 200W":        ("PC komponenty",               "Napájení"),
+    "Rámeček Na Disk":              ("Datová úložiště",             "Ostatní úložiště"),
+    "Zesilovač Pro Pozemní Analogový A Digitální Příjem Tv/Fm Signálů": ("Sítě a konektivita", "Anténní příslušenství"),
+    "Bleskojistka F Konektory":     ("Sítě a konektivita",          "Anténní příslušenství"),
+    "Příslušenství Pro Lokátor Gps Anténa S 5M Pigtailem S Sma Konektorem": ("Sítě a konektivita", "Anténní příslušenství"),
+    "Autentizační Token Univerzální Bezpečnostní Token S Usb": ("Periferie a příslušenství", "Ostatní příslušenství"),
+    "Příslušenství K Ovladači Sada Příslušenství Pro Ovladač Xbox Elite Series 2": ("Herní technika", "Herní příslušenství"),
+    "Příslušenství K Vr Brýlím Ipega Ochranné Krytky Objektivů Pro Playstation Vr2": ("Herní technika", "Herní příslušenství"),
+    "Cestovní Pouzdro":             ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Dětský Psací Stůl S Židlí":    ("Kancelář a příslušenství",    "Kancelářské vybavení"),
+    "Zametač Všechny Druhy Podlah": ("Vysavače a úklid",            "Čisticí příslušenství"),
+
+    # ── Additional exact matches to clear Ostatní ─────────────────────────────
+    "Ostatní úložiště":             ("Datová úložiště",             "Ostatní úložiště"),
+    "Adventní Kalendář":            ("Hry a hračky",                "Hry a hračky"),
+    "Coffee Pods":                  ("Malé domácí spotřebiče",      "Kávovary"),
+    "Baterie Kit":                  ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Konektor Usb":                 ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Dvd Mechanika Sata":           ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Klasická Kytara":              ("Zvuk a hudba",                "Hudební nástroje"),
+    "Elektronické Bicí":            ("Zvuk a hudba",                "Hudební nástroje"),
+    "Nástrojová Kosmetika":         ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Klička Na Navíjení Strun":     ("Zvuk a hudba",                "Hudební příslušenství"),
+    "Domácí Kino 5.1 Zvukový Systém": ("Zvuk a hudba",             "Soundbary"),
+    "Peněženka Na Hesla Offline Hardwarová Peněženka": ("Periferie a příslušenství", "Ostatní příslušenství"),
+    "Peněženka Na Hesla Offline":   ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Air Fryers":                   ("Malé domácí spotřebiče",      "Fritézy"),
+    "Arcade Stick":                 ("Herní technika",              "Herní ovladače"),
+    "Nabíjecí Stanice":             ("Periferie a příslušenství",   "Ostatní příslušenství"),
+    "Spojka":                       ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Konektor Micro Usb":           ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Zástrčka":                     ("Sítě a konektivita",          "Kabely a rozbočovače"),
+    "Klip Na Brýle Na Brýle":       ("Periferie a příslušenství",   "Brýle na počítač"),
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENGLISH CATEGORY NAMES (original Alza export)
+# ─────────────────────────────────────────────────────────────────────────────
+CATEGORY_MAP.update({
+    "Cables & Hubs":            ("Sítě a konektivita",         "Kabely a rozbočovače"),
+    "Games & Toys":             ("Hry a hračky",               "Hry a hračky"),
+    "Headphones":               ("Zvuk a hudba",               "Sluchátka"),
+    "Laptop Accessories":       ("Počítače a notebooky",       "Příslušenství k notebookům"),
+    "Speakers":                 ("Zvuk a hudba",               "Reproduktory"),
+    "Keyboards":                ("Periferie a příslušenství",  "Klávesnice"),
+    "PC Cases":                 ("PC komponenty",              "PC skříně"),
+    "Kitchen – Ovens & Hobs":   ("Velké domácí spotřebiče",   "Sporáky"),
+    "Refrigerators":            ("Velké domácí spotřebiče",   "Ledničky"),
+    "Graphics Cards":           ("PC komponenty",              "Grafické karty"),
+    "Bags & Backpacks":         ("Kancelář a příslušenství",   "Tašky a batohy"),
+    "External Drives":          ("Datová úložiště",            "Externí disky"),
+    "Digital Cameras":          ("Foto a kamery",              "Fotoaparáty"),
+    "Blenders":                 ("Malé domácí spotřebiče",     "Mixéry a roboty"),
+    "Irons":                    ("Malé domácí spotřebiče",     "Žehličky"),
+    "Kitchen Robots":           ("Malé domácí spotřebiče",     "Mixéry a roboty"),
+    "Toasters":                 ("Malé domácí spotřebiče",     "Toustovače"),
+    "Gaming Headsets":          ("Zvuk a hudba",               "Sluchátka"),
+    "Microwaves":               ("Malé domácí spotřebiče",     "Mikrovlnné trouby"),
+    "Action Cameras":           ("Foto a kamery",              "Akční kamery"),
+    "Robot Vacuums":            ("Vysavače a úklid",           "Robotické vysavače"),
+    "Fitness Trackers":         ("Chytré zařízení",            "Fitness náramky"),
+    "Tablets":                  ("Telefony a tablety",         "Tablety"),
+    "USB Flash Drives":         ("Datová úložiště",            "Flash disky"),
+    "PC Cooling":               ("PC komponenty",              "Chlazení"),
+    "Soundbars":                ("Zvuk a hudba",               "Soundbary"),
+    "Webcams":                  ("Foto a kamery",              "Webkamery"),
+    "Air Purifiers":            ("Chytré zařízení",            "Čističky vzduchu"),
+    "Kettles":                  ("Malé domácí spotřebiče",     "Varné konvice"),
+    "Coffee Machines":          ("Malé domácí spotřebiče",     "Kávovary"),
+    "IP Cameras":               ("Chytré zařízení",            "IP kamery"),
+    "Routers":                  ("Sítě a konektivita",         "Routery"),
+    "Projectors":               ("Televize a video",           "Projektory"),
+    "Game Controllers":         ("Herní technika",             "Herní ovladače"),
+    "Gaming Mice":              ("Herní technika",             "Herní příslušenství"),
+    "Gaming Keyboards":         ("Herní technika",             "Herní příslušenství"),
+    "Smart Home":               ("Chytré zařízení",            "Chytrá domácnost"),
+    "Laptops":                  ("Počítače a notebooky",       "Notebooky"),
+    "NAS":                      ("Datová úložiště",            "NAS úložiště"),
+    "HDD":                      ("Datová úložiště",            "Pevné disky"),
+    "Vacuum Cleaners":          ("Vysavače a úklid",           "Vysavače"),
+    "Smartwatches":             ("Chytré zařízení",            "Chytré hodinky"),
+    "Mice":                     ("Periferie a příslušenství",  "Myši"),
+    "Mobile Phones":            ("Telefony a tablety",         "Mobilní telefony"),
+    "Microphones":              ("Zvuk a hudba",               "Mikrofony"),
+    "Chrániče Sluchu":          ("Zvuk a hudba",               "Sluchátka"),
+    "Chrániče sluchu":          ("Zvuk a hudba",               "Sluchátka"),
+    "Chrániče Sluchu Pro Děti": ("Zvuk a hudba",               "Sluchátka"),
+    "Špunty Do Uší Vhodné Na Koncerty": ("Zvuk a hudba",       "Sluchátka"),
+    "Hardware Peněženka":       ("Periferie a příslušenství",  "Ostatní příslušenství"),
+    "Hardware peněženky":       ("Periferie a příslušenství",  "Ostatní příslušenství"),
+    "Bezpečnostní Zámek":       ("Periferie a příslušenství",  "Ostatní příslušenství"),
+    "Ochranná Fólie":           ("Periferie a příslušenství",  "Ostatní příslušenství"),
+    "Antivibrační Sloupky":     ("PC komponenty",              "Chlazení"),
+    "Příslušenství Pro Pc Skříně": ("PC komponenty",           "PC skříně"),
+    "Střihová Karta Externí":   ("Foto a kamery",              "Akční kamery"),
+    "Záznamové Zařízení Externí": ("Zvuk a hudba",             "Zvukové karty"),
+    "Čistič Koberců":           ("Vysavače a úklid",           "Čisticí příslušenství"),
+})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REGEX FALLBACK for over-specific Czech category names
+# Applied when a category is NOT found in CATEGORY_MAP.
+# Each entry: (MainCategory, Subcategory, compiled regex)
+# ─────────────────────────────────────────────────────────────────────────────
+REGEX_RULES = [
+    # PC komponenty
+    ("PC komponenty",              "Flash disky",               re.compile(r'^Flash Disk \d', re.I)),
+    ("PC komponenty",              "Chlazení",                  re.compile(r'^Ventilátor Do Pc\b', re.I)),
+    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chladič Na Procesor\b', re.I)),
+    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chladič Pevného Disku\b', re.I)),
+    ("PC komponenty",              "Chlazení",                  re.compile(r'^Chránič Ventilátorů\b', re.I)),
+    ("PC komponenty",              "Chlazení",                  re.compile(r'^PC Cooling\b', re.I)),
+    ("PC komponenty",              "Napájení",                  re.compile(r'^Počítačový Zdroj\b', re.I)),
+    ("PC komponenty",              "Procesory",                 re.compile(r'^Procesor \d+', re.I)),
+    ("PC komponenty",              "Základní desky",            re.compile(r'^Základní Deska\b', re.I)),
+    ("PC komponenty",              "Napájení",                  re.compile(r'^Zdroj \d+W\b', re.I)),
+    ("PC komponenty",              "Ostatní příslušenství",     re.compile(r'^Řadič Do Pcie\b', re.I)),
+    ("PC komponenty",              "Mini počítače",             re.compile(r'^(Mini Počítač|Raspberry Pi|Pouzdro Na Minipočítač)', re.I)),
+
+    # Datová úložiště
+    ("Datová úložiště",            "Flash disky",               re.compile(r'^Flash Disk\b', re.I)),
+    ("Datová úložiště",            "Flash disky",               re.compile(r'^Flash Disk', re.I)),
+    ("Datová úložiště",            "Pevné disky",               re.compile(r'^Pevný Disk\b', re.I)),
+    ("Datová úložiště",            "Pevné disky",               re.compile(r'^Pevný Disk', re.I)),
+    ("Datová úložiště",            "Externí disky",             re.compile(r'^Externí Disk\b', re.I)),
+    ("Datová úložiště",            "Ostatní úložiště",          re.compile(r'^Rámeček Na Disk\b', re.I)),
+
+    # Sítě a konektivita
+    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Konektor Typu\b', re.I)),
+    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Keystone\b', re.I)),
+    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Rozbočovač\b', re.I)),
+    ("Sítě a konektivita",         "Kabely a rozbočovače",      re.compile(r'^Zásuvka\b', re.I)),
+    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Switch\b', re.I)),
+    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Přepínač\b', re.I)),
+    ("Sítě a konektivita",         "Síťové přepínače",          re.compile(r'^Přepínač Datový\b', re.I)),
+    ("Sítě a konektivita",         "Extendery",                 re.compile(r'^Extender\b', re.I)),
+    ("Sítě a konektivita",         "Anténní příslušenství",     re.compile(r'^Zesilovač Pro', re.I)),
+    ("Sítě a konektivita",         "Anténní příslušenství",     re.compile(r'^Anténní Zesilovač\b', re.I)),
+
+    # Vysavače a úklid
+    ("Vysavače a úklid",           "Robotické vysavače",        re.compile(r'^Robotický Vysavač\b', re.I)),
+    ("Vysavače a úklid",           "Tyčové vysavače",           re.compile(r'^Tyčový Vysavač\b', re.I)),
+    ("Vysavače a úklid",           "Vysavače",                  re.compile(r'^(Bezsáčkový|Sáčkový|Ruční|Průmyslový|Autovysavač|Vysavač Popela)\b', re.I)),
+    ("Vysavače a úklid",           "Vysavače",                  re.compile(r'Vysavač', re.I)),
+    ("Vysavače a úklid",           "Čisticí příslušenství",     re.compile(r'^Zametač\b', re.I)),
+    ("Vysavače a úklid",           "Čisticí příslušenství",     re.compile(r'^(Podlahová Myčka|Parní Mop)\b', re.I)),
+
+    # Herní technika
+    ("Herní technika",             "Herní ovladače",            re.compile(r'^Gamepad\b', re.I)),
+    ("Herní technika",             "Herní ovladače",            re.compile(r'^Herní Ovladač\b', re.I)),
+    ("Herní technika",             "Herní ovladače",            re.compile(r'^Volant\b', re.I)),
+    ("Herní technika",             "Herní sedačky",             re.compile(r'^Herní (Závodní Sedačka|Křeslo|Sedačka)\b', re.I)),
+    ("Herní technika",             "Závodní příslušenství",     re.compile(r'^Stojan Na Volant\b', re.I)),
+    ("Herní technika",             "Herní příslušenství",       re.compile(r'^(Obal Na Nintendo|Stojan Na Herní|Gripy Na Ovladač|Streamdeck|RGB Příslušenství)\b', re.I)),
+    ("Herní technika",             "Herní konzole",             re.compile(r'^Herní Konzole\b', re.I)),
+    ("Herní technika",             "Herní příslušenství",       re.compile(r'^Stojan Na Herní Konzoli\b', re.I)),
+    ("Herní technika",             "Herní příslušenství",       re.compile(r'^Obal Na (Ovladač|Klávesy)\b', re.I)),
+    ("Herní technika",             "Závodní příslušenství",     re.compile(r'^(Letecké Pedály|Pedály K Volantu)\b', re.I)),
+    ("Herní technika",             "Herní příslušenství",       re.compile(r'^(Příslušenství K Vr Brýlím|Nabíjecí (Stanice|Baterie) .*(Ipega|Ovladač|Dualshock|Controller))\b', re.I)),
+
+    # Zvuk a hudba
+    ("Zvuk a hudba",               "Reproduktory",              re.compile(r'^Reproduktor\b', re.I)),
+    ("Zvuk a hudba",               "Soundbary",                 re.compile(r'^Subwoofer\b', re.I)),
+    ("Zvuk a hudba",               "Rádia a Hi-Fi",             re.compile(r'^(Radiomagnetofon|Rádio|Mikrosystém|Minisystém|Multimediální Centrum)\b', re.I)),
+    ("Zvuk a hudba",               "Hudební nástroje",          re.compile(r'^(Klávesy|Midi Klávesy|Syntezátor|Digitální Piano|Ukulele|Perkuse|Kazoo|Foukací Harmonika|Zobcová Flétna|Kombo)\b', re.I)),
+    ("Zvuk a hudba",               "Hudební příslušenství",     re.compile(r'^(Stojan Na (Kytaru|Noty|Klávesy)|Trsátko|Struny|Kapodastr|Ladička|Lampička Na Noty|Paličky Na Bicí|Metronom|Příslušenství Pro Hudební)\b', re.I)),
+    ("Zvuk a hudba",               "Gramofony",                 re.compile(r'^Gramofon\b', re.I)),
+    ("Zvuk a hudba",               "Sluchátka",                 re.compile(r'^Špunty Do Uší\b', re.I)),
+    ("Zvuk a hudba",               "Zvukové karty",             re.compile(r'^(Dac Převodník|Dac/Amp|Zvuková Karta)\b', re.I)),
+
+    # Televize a video
+    ("Televize a video",           "Multimediální přehrávače",  re.compile(r'^(Blu|Dvd Přehrávač|Mp4 Přehrávač|Síťový Přehrávač|Video Grabber|Multimediální Centrum)\b', re.I)),
+
+    # Periferie a příslušenství
+    ("Kancelář a příslušenství",   "Kancelářské vybavení",      re.compile(r'^(Kancelářská Židle|Kancelářské Křeslo|Stojan Na Pc|Držák Na Pc|Dětský Psací Stůl|Dětská Židle)\b', re.I)),
+    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^(Nabíječka Do Sítě|Přepěťová Ochrana|Rgb Příslušenství|Stolní Lampa|Lampička)\b', re.I)),
+
+    # Telefony a tablety
+    ("Telefony a tablety",         "Příslušenství",             re.compile(r'^(Držák Na Mobil|Pouzdro Na Tablet|Obal Na Tablet)\b', re.I)),
+    ("Telefony a tablety",         "Ostatní",                   re.compile(r'^Dobíjecí (Karta|Stanice)\b', re.I)),
+    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^Externí Vypalovačka\b', re.I)),
+    ("Periferie a příslušenství",  "Ostatní příslušenství",     re.compile(r'^Příslušenství Pro Pc Skříně\b', re.I)),
+    ("Vysavače a úklid",           "Čisticí příslušenství",     re.compile(r'^Čistič Koberců\b', re.I)),
+]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NAME-BASED DETECTION for "Home Appliances" products
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Phone brands / model patterns — match = Mobilní telefony
+PHONE_RE = re.compile(
+    r'\biphone\b'
+    r'|\bsamsung galaxy [a-z]'
+    r'|\bgalaxy (z|a|s|m|f)\d'
+    r'|\bgalaxy fold\b|\bgalaxy flip\b'
+    r'|\boneplus\b'
+    r'|\bgoogle pixel\b'
+    r'|\brealme\b'
+    r'|\baligator\b'
+    r'|\bulefone\b'
+    r'|\bmotorola moto\b'
+    r'|\bhonor \d'
+    r'|\bhuawei (p|mate|nova)\d'
+    r'|\bxiaomi [0-9]'
+    r'|\bxiaomi redmi\b|\bredmi\b'
+    r'|\bnokia [gcgt]\d'
+    r'|\boppo (a|find|reno)\d'
+    r'|\bsony xperia\b',
+    re.IGNORECASE
+)
+
+# Tablet patterns — match = Tablety
+TABLET_RE = re.compile(
+    r'\bipad\b'
+    r'|\bsamsung tab\b|\bgalaxy tab\b'
+    r'|\bxiaomi pad\b|\blenovo tab\b'
+    r'|\bhuawei matepad\b'
+    r'|\bumax u-one\b',
+    re.IGNORECASE
+)
+
+# Gaming handheld — match = Herní konzole
+HANDHELD_RE = re.compile(
+    r'\bmsi claw\b|\bsteam deck\b|\basus rog ally\b',
+    re.IGNORECASE
+)
+
+# Appliance sub-rules for remaining "Home Appliances"
+# Each entry: (MainCategory, Subcategory), regex pattern
+APPLIANCE_RULES = [
+    (("Vysavače a úklid",           "Robotické vysavače"),    re.compile(r'\brobot\b|\broomba\b', re.I)),
+    (("Vysavače a úklid",           "Tyčové vysavače"),       re.compile(r'\btyčov[áy]\b|\baquatrio\b|\baquaforce\b|\bhandy force\b|\bhandy\b|\bfreedom\b', re.I)),
+    (("Vysavače a úklid",           "Vysavače"),              re.compile(r'\bvysava[cč]\b|\bcyclone\b|\bturbovac\b|\bbbhf\b|\baquawash\b|\bh-energy\b|\bhe\d{3}\b', re.I)),
+    (("Velké domácí spotřebiče",    "Pračky"),                re.compile(r'\bpra[cč]k[ay]\b|\bwf[0-9]\b|\bww\d\b|\bwashing machine\b', re.I)),
+    (("Velké domácí spotřebiče",    "Myčky nádobí"),          re.compile(r'\bmy[cč]k[ay]\b|\bdishwash\b|\bbdin\b|\bbdfn\b|\bgi67\b|\bsgr-dw\b', re.I)),
+    (("Velké domácí spotřebiče",    "Ledničky"),              re.compile(r'\bledni[cč]k\b|\brcna\b|\bnrc6\b|\bfridge\b|\brefrigerator\b|\bamerická\b|\bb5rcna\b', re.I)),
+    (("Velké domácí spotřebiče",    "Mrazáky"),               re.compile(r'\bmrazák\b|\bfreezer\b', re.I)),
+    (("Velké domácí spotřebiče",    "Sušičky prádla"),        re.compile(r'\bsu[sš]i[cč]k[ay]\b|\bdryer\b', re.I)),
+    (("Velké domácí spotřebiče",    "Sporáky"),               re.compile(r'\bsporák\b|\brange\b', re.I)),
+    (("Velké domácí spotřebiče",    "Trouby"),                re.compile(r'\btroub[ay]\b|\boven\b|\bim 6435\b', re.I)),
+    (("Malé domácí spotřebiče",     "Kávovary"),              re.compile(r'\bkávovar\b|\bcoffee\b|\bespresso\b|\bnanopresso\b|\bnespresso\b|\bdolce\b|\bbarista\b|\bka\s?5[0-9]{3}\b|\bke 550\b|\bnk2w\b', re.I)),
+    (("Malé domácí spotřebiče",     "Varné konvice"),         re.compile(r'\bkonvic\b|\bkettle\b|\bwatercooker\b|\bphwk\b|\brk-0\b|\brohnson r-7\b|\bcatler ke\b|\bphilco ph\b|\beta.*adagio\b|\borava.*retro konvice\b', re.I)),
+    (("Malé domácí spotřebiče",     "Mixéry a roboty"),       re.compile(r'\bmixér\b|\bblender\b|\bkitchen.*robot\b|\bfoodprocessor\b', re.I)),
+    (("Malé domácí spotřebiče",     "Parní čističe"),         re.compile(r'\bparní\b|\bsteam clean\b|\bpáry\b', re.I)),
+    (("Malé domácí spotřebiče",     "Ventilátory"),           re.compile(r'\baerostar\b|\bventilátor\b|\bfan\b|\bair.*cooler\b|\btesla.*t[57]\d{2}\b', re.I)),
+    (("Malé domácí spotřebiče",     "Žehličky"),              re.compile(r'\bžehli[cč]k\b|\biron\b', re.I)),
+    (("Malé domácí spotřebiče",     "Fény a stylingové přístroje"), re.compile(r'\bfén\b|\bhair.*dryer\b|\bstyling\b|\bsencor shd\b', re.I)),
+]
+
+
+def classify_home_appliance(name: str) -> tuple:
+    """
+    Given a product name from the 'Home Appliances' bucket, return
+    (MainCategory, Subcategory).  Falls back to Ostatní if nothing matches.
+    """
+    if PHONE_RE.search(name):
+        return ("Telefony a tablety", "Mobilní telefony")
+    if TABLET_RE.search(name):
+        return ("Telefony a tablety", "Tablety")
+    if HANDHELD_RE.search(name):
+        return ("Herní technika", "Herní konzole")
+    for (main, sub), pattern in APPLIANCE_RULES:
+        if pattern.search(name):
+            return (main, sub)
+    # Generic fallback for genuine appliances we couldn't classify more specifically
+    return ("Malé domácí spotřebiče", "Ostatní spotřebiče")
+
+
+def classify_product(name: str, current_cat: str) -> tuple:
+    """Return (MainCategory, Subcategory) for a given product."""
+    if current_cat in ("Home Appliances", "Ostatní spotřebiče"):
+        return classify_home_appliance(name)
+    # 1. Exact match in CATEGORY_MAP
+    if current_cat in CATEGORY_MAP:
+        return CATEGORY_MAP[current_cat]
+    # 2. Regex fallback for over-specific Czech categories
+    for main, sub, pattern in REGEX_RULES:
+        if pattern.search(current_cat):
+            return (main, sub)
+    # 3. Nothing matched
+    return ("Ostatní", current_cat or "Nezařazeno")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Main
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run():
+    import shutil, tempfile
+
+    if not os.path.exists(DB_PATH):
+        print(f"✗  Database not found at {DB_PATH}")
+        sys.exit(1)
+
+    # The DB lives on a FUSE-mounted filesystem that doesn't support SQLite WAL.
+    # Work on a /tmp copy, then write back.
+    tmp = "/tmp/qualitydb_restructure3.db"; import subprocess; subprocess.run(["chmod", "644", tmp], capture_output=True)
+    shutil.copy2(DB_PATH, tmp)
+    print(f"Working on copy: {tmp}")
+
+    conn = sqlite3.connect(tmp)
+    conn.row_factory = sqlite3.Row
+
+    # Add MainCategory column if missing
+    existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(products)").fetchall()}
+    if "MainCategory" not in existing_cols:
+        if DRY_RUN:
+            print("[dry-run] Would ALTER TABLE products ADD COLUMN MainCategory TEXT")
+        else:
+            conn.execute("ALTER TABLE products ADD COLUMN MainCategory TEXT")
+            print("✓  Added MainCategory column")
+
+    rows = conn.execute("SELECT ProductURL, Name, Category FROM products").fetchall()
+    print(f"Processing {len(rows):,} products…\n")
+
+    updates = []           # (main_cat, new_sub, product_url)
+    skipped_unmapped = defaultdict(int)
+
+    for row in rows:
+        url  = row["ProductURL"] or ""
+        name = row["Name"] or ""
+        cat  = row["Category"] or ""
+
+        main_cat, new_sub = classify_product(name, cat)
+        updates.append((main_cat, new_sub, url, cat))
+        if main_cat == "Ostatní":
+            skipped_unmapped[cat] += 1
+
+    # ── Summary before writing ────────────────────────────────────────────────
+    main_counts = defaultdict(int)
+    sub_changes = defaultdict(int)
+    home_fixed  = 0
+
+    for main, sub, url, old_cat in updates:
+        main_counts[main] += 1
+        if old_cat == "Home Appliances" and main != "Malé domácí spotřebiče":
+            home_fixed += 1
+        if sub != old_cat:
+            sub_changes[f"{old_cat} → {sub}"] += 1
+
+    print("=== Proposed MainCategory distribution ===")
+    for cat, cnt in sorted(main_counts.items(), key=lambda x: -x[1]):
+        print(f"  {cnt:>5}  {cat}")
+
+    print(f"\n  Phones/tablets rescued from Home Appliances: {home_fixed}")
+
+    if skipped_unmapped:
+        print(f"\n  Categories → 'Ostatní' (no mapping found):")
+        for cat, cnt in sorted(skipped_unmapped.items(), key=lambda x: -x[1])[:20]:
+            print(f"    {cnt:>4}  {cat!r}")
+
+    if DRY_RUN:
+        print("\n[dry-run] No changes written.")
+        conn.close()
+        return
+
+    # ── Apply updates ─────────────────────────────────────────────────────────
+    print("\nWriting updates…")
+    cur = conn.cursor()
+    for main_cat, new_sub, url, _old_cat in updates:
+        if url:
+            cur.execute(
+                "UPDATE products SET MainCategory=?, Category=? WHERE ProductURL=?",
+                (main_cat, new_sub, url)
+            )
+        else:
+            # For products without a URL (rare), match by name+old_category
+            cur.execute(
+                "UPDATE products SET MainCategory=?, Category=? WHERE Name=? AND Category=?",
+                (main_cat, new_sub, _old_cat, _old_cat)
+            )
+
+    conn.commit()
+
+    # Verify
+    total = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+    mapped = conn.execute("SELECT COUNT(*) FROM products WHERE MainCategory IS NOT NULL").fetchone()[0]
+    print(f"\n✓  Done. {mapped:,}/{total:,} products have MainCategory set.")
+
+    print("\n=== Final MainCategory counts ===")
+    for row in conn.execute(
+        "SELECT MainCategory, COUNT(*) FROM products GROUP BY MainCategory ORDER BY COUNT(*) DESC"
+    ).fetchall():
+        print(f"  {row[1]:>5}  {row[0]}")
+
+    conn.close()
+
+    if not DRY_RUN:
+        shutil.copy2(tmp, DB_PATH)
+        print(f"\n✓  Copied updated DB back to {DB_PATH}")
+    os.remove(tmp)
+
+
+if __name__ == "__main__":
+    run()
