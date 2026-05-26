@@ -1,0 +1,29 @@
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches:
+      - main
+      - claude/nice-wright-2cPJ2
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    concurrency: deploy-${{ github.ref }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly.io
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Re-run category restructure on volume
+        run: |
+          flyctl ssh console --command "python3 /app/QualityDB/restructure_categories.py" || true
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
