@@ -1,8 +1,11 @@
-# Database files — live on Fly volume, never in the image
-**/*.db
+# WAL/journal files — never needed in the image
 **/*.db-wal
 **/*.db-shm
 **/*.db-journal
+# Allow QualityDB/products.db as the seed file for the Fly volume
+# All other .db files stay out
+**/*.db
+!QualityDB/products.db
 
 # Backup folder (large DB backups)
 **/backup/

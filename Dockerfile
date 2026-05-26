@@ -10,9 +10,12 @@ RUN pip install --no-cache-dir -r requirements.txt 2>/dev/null || true
 COPY QualityDB/ ./QualityDB/
 
 # The database lives on a persistent Fly volume mounted at /data
-# We symlink it so the app finds it at the expected path
+# entrypoint.sh seeds the volume on first boot if needed
 RUN mkdir -p /data
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8080
 
-CMD ["python3", "QualityDB/server.py"]
+CMD ["/entrypoint.sh"]
