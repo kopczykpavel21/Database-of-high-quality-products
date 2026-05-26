@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/nice-wright-2cPJ2
+  workflow_dispatch:
 
 jobs:
   deploy:
