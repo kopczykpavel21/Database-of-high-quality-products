@@ -2224,6 +2224,26 @@ function openModal(productOrJson, cardId) {
       </div>
     </div>` : ""}
 
+    ${p.qt_brand_score != null ? (() => {
+      const score = parseFloat(p.qt_brand_score);
+      if (isNaN(score)) return '';
+      const cls   = score >= 75 ? 'expert-good' : score >= 65 ? 'expert-warn' : 'expert-bad';
+      const brand = p.brand ? escHtml(p.brand) : '';
+      const cat   = escHtml(p.NormalizedCategory || '');
+      return `
+      <div class="modal-expert-block">
+        <div class="modal-expert-label">🔬 Independent Expert Test Score</div>
+        <div class="modal-expert-row">
+          <div class="modal-expert-score ${cls}">${score.toFixed(1)}<span class="modal-expert-max"> / 100</span></div>
+          <div class="modal-expert-meta">
+            ${brand ? `<div class="modal-expert-brand">${brand} brand average · ${cat}</div>` : ''}
+            <div class="modal-expert-note">Average score across independent consumer-organisation tests</div>
+            <a class="modal-expert-link" href="https://institutkvality.cz/hodnoceni" target="_blank" rel="noopener noreferrer">Full brand rankings at institutkvality.cz →</a>
+          </div>
+        </div>
+      </div>`;
+    })() : ""}
+
     ${getIR(p) ? (() => {
       const ir = getIR(p);
       const score = parseFloat(ir.s);

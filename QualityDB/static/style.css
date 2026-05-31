@@ -1370,6 +1370,59 @@ mark.hl {
   border-top: 1px solid var(--border);
   padding-top: 16px;
 }
+/* ── Expert test score block in product modal ──────────────────────────── */
+.modal-expert-block {
+  margin: 14px 0;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.modal-expert-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 10px;
+}
+.modal-expert-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.modal-expert-score {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.modal-expert-score.expert-good { color: #1a7f37; }
+.modal-expert-score.expert-warn { color: #9a6700; }
+.modal-expert-score.expert-bad  { color: #c0392b; }
+.modal-expert-max { font-size: 14px; font-weight: 500; color: var(--text3); }
+.modal-expert-meta { flex: 1; min-width: 0; }
+.modal-expert-brand {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text1);
+  margin-bottom: 3px;
+}
+.modal-expert-note {
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 5px;
+}
+.modal-expert-link {
+  font-size: 11px;
+  color: var(--green);
+  text-decoration: none;
+}
+.modal-expert-link:hover { text-decoration: underline; }
+[data-theme="dark"] .modal-expert-score.expert-good { color: #6ee7b7; }
+[data-theme="dark"] .modal-expert-score.expert-warn { color: #fcd34d; }
+[data-theme="dark"] .modal-expert-score.expert-bad  { color: #fca5a5; }
+
 .modal-actions {
   display: flex;
   gap: 10px;
