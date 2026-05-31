@@ -2060,6 +2060,47 @@ def _populate_pricerunner_images() -> int:
     return 0
 
 
+def _populate_coolblue_images() -> int:
+    """Construct Coolblue image URLs from product IDs in URLs — no HTTP requests needed.
+
+    Coolblue product URLs follow the pattern:
+        https://www.coolblue.nl/product/{ID}/product-name.html
+    Coolblue CDN:
+        https://image.coolblue.nl/500x500/products/{ID}
+
+    Returns the number of rows updated (includes resetting prior __none__ failures).
+    """
+    import re as _re
+    conn = open_db()
+    rows = conn.execute(
+        """SELECT rowid, ProductURL FROM products
+           WHERE source = 'coolblue'
+             AND ProductURL IS NOT NULL AND ProductURL != ''
+             AND (image_url IS NULL OR image_url = '' OR image_url = '__none__')"""
+    ).fetchall()
+
+    if not rows:
+        conn.close()
+        return 0
+
+    updates = []
+    for rowid, url in rows:
+        m = _re.search(r'/product/(\d+)/', url)
+        if m:
+            pid = m.group(1)
+            img = f"https://image.coolblue.nl/500x500/products/{pid}"
+            updates.append((img, rowid))
+
+    if updates:
+        conn.executemany("UPDATE products SET image_url = ? WHERE rowid = ?", updates)
+        conn.commit()
+    conn.close()
+    logging.info(f"[coolblue-images] populated {len(updates)} image URLs from product IDs")
+    return len(updates)
+
+
+
+
 def _post_scrape_normalize() -> int:
     """Run category normalization after a nightly scrape completes.
 
@@ -4884,6 +4925,16 @@ if __name__ == "__main__":
                 print(f"[init] amazon image populate failed: {_e}", flush=True)
 
         threading.Thread(target=_run_amazon_images, daemon=True, name="amazon-img").start()
+
+        # 7a4. Populate Coolblue images from product ID in URL (no HTTP requests)
+        def _run_coolblue_images():
+            try:
+                n = _populate_coolblue_images()
+                print(f"[init] coolblue images from URL IDs: {n} rows", flush=True)
+            except Exception as _e:
+                print(f"[init] coolblue image populate failed: {_e}", flush=True)
+
+        threading.Thread(target=_run_coolblue_images, daemon=True, name="coolblue-img").start()
 
         # 7b. Background og:image fetcher — fills image_url for heureka, prisjakt, etc.
         # Batch=5000 covers all remaining untried products (~8k total untried) in 2 deploys.
