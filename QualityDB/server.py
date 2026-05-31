@@ -3193,6 +3193,77 @@ def query_stats():
     return result
 
 
+# ── Top-Picks cache ───────────────────────────────────────────────────────────
+_top_picks_cache: dict | None = None
+_top_picks_ts: float = 0.0
+TOP_PICKS_TTL = 900   # 15 minutes
+
+
+def query_top_picks(min_recommend: float = 93.0,
+                    min_reviews: int = 20,
+                    limit_per_cat: int = 5) -> dict:
+    """Return top-N products per NormalizedMainGroup, quality-filtered.
+
+    Products from hidden sources (dtest, warentest) are excluded.
+    Results are cached for TOP_PICKS_TTL seconds keyed by the three params.
+    """
+    global _top_picks_cache, _top_picks_ts
+    import time as _time
+    from collections import defaultdict as _dd
+    cache_key = (min_recommend, min_reviews, limit_per_cat)
+    now = _time.monotonic()
+    if (_top_picks_cache is not None
+            and _top_picks_cache.get("_params") == cache_key
+            and (now - _top_picks_ts) < TOP_PICKS_TTL):
+        return _top_picks_cache
+
+    conn = open_db()
+    rows = conn.execute(
+        """SELECT id, Name, NormalizedMainGroup, NormalizedCategory,
+                  RecommendRate_pct, ReviewsCount,
+                  Price_CZK, Price_EUR,
+                  COALESCE(currency, 'CZK') AS currency,
+                  COALESCE(country, 'CZ')  AS country,
+                  source, ProductURL, image_url, brand,
+                  COALESCE(cat_rank, 99999) AS cat_rank
+           FROM products
+           WHERE source NOT IN ('dtest', 'warentest')
+             AND RecommendRate_pct >= ?
+             AND ReviewsCount       >= ?
+             AND NormalizedMainGroup IS NOT NULL
+             AND NormalizedMainGroup != ''
+           ORDER BY NormalizedMainGroup,
+                    COALESCE(cat_rank, 99999) ASC""",
+        (min_recommend, min_reviews),
+    ).fetchall()
+    conn.close()
+
+    by_cat: dict = _dd(list)
+    for r in rows:
+        cat = r["NormalizedMainGroup"]
+        if len(by_cat[cat]) < limit_per_cat:
+            by_cat[cat].append(dict(r))
+
+    # Sort categories: most products first, then alphabetical
+    categories = sorted(by_cat.keys(), key=lambda c: (-len(by_cat[c]), c))
+    result = {
+        "categories": [
+            {"name": cat, "products": by_cat[cat]}
+            for cat in categories
+        ],
+        "total_products": sum(len(v) for v in by_cat.values()),
+        "params": {
+            "min_recommend": min_recommend,
+            "min_reviews":   min_reviews,
+            "limit_per_cat": limit_per_cat,
+        },
+        "_params": cache_key,
+    }
+    _top_picks_cache = result
+    _top_picks_ts    = now
+    return result
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # silence access log
@@ -3296,6 +3367,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(groups, max_age=600)
             except Exception as e:
                 import logging; logging.error(f"/api/cross-market: {e}", exc_info=True)
+                self.send_json({"error": str(e)})
+
+        elif path == "/api/top-picks":
+            try:
+                min_rec = float(params.get("min_recommend", ["93"])[0])
+                min_rev = int(params.get("min_reviews",     ["20"])[0])
+                limit_n = int(params.get("limit_per_cat",   ["5"])[0])
+                self.send_json(query_top_picks(min_rec, min_rev, limit_n),
+                               max_age=TOP_PICKS_TTL)
+            except Exception as e:
+                import logging; logging.error(f"/api/top-picks: {e}", exc_info=True)
                 self.send_json({"error": str(e)})
 
         elif path == "/api/brands":
@@ -4991,6 +5073,14 @@ if __name__ == "__main__":
             print(f"[init] Movers cache warmed: {len(r.get('risers',[]))+len(r.get('fallers',[]))} products", flush=True)
         except Exception as _e:
             print(f"[init] Movers cache warm failed: {_e}", flush=True)
+
+        # 8e. Pre-warm top-picks cache (best products per category)
+        try:
+            _tp = query_top_picks()
+            print(f"[init] Top-picks cache warmed: {_tp.get('total_products',0)} products "
+                  f"across {len(_tp.get('categories',[]))} categories", flush=True)
+        except Exception as _e:
+            print(f"[init] Top-picks cache warm failed: {_e}", flush=True)
 
         print("✦ QualityDB init complete.", flush=True)
 

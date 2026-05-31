@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Quality Product Database</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%232563eb'/><text x='50' y='72' font-size='58' text-anchor='middle' font-family='serif'>⭐</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
@@ -17,33 +18,56 @@
       <span class="logo-icon">✦</span>
       <span class="logo-text">QualityDB</span>
     </div>
+
     <div class="header-stats" id="header-stats">
-      <span class="stat-pill"><span id="stat-total">—</span> products</span>
-      <span class="stat-pill">⭐ <span id="stat-stars">—</span> avg</span>
+      <span class="stat-pill"><span id="stat-total">—</span> <span data-i18n="statProducts">products</span></span>
+      <span class="stat-pill">⭐ <span id="stat-stars">—</span> <span data-i18n="statAvg">avg</span></span>
+      <span class="stat-pill" id="stat-images" title="Products with product photos" style="display:none"></span>
+      <button class="stat-pill status-health-btn" id="health-btn" title="Data freshness status">
+        <span id="health-indicator" style="color:#aaa">⬤</span> Sources
+      </button>
+      <button class="stat-pill theme-toggle-btn" id="theme-toggle" title="Toggle dark/light mode" aria-label="Toggle dark mode">🌙</button>
+      <button class="stat-pill auth-btn" id="auth-btn" title="Contribute data to Institut Kvality">
+        <span id="auth-btn-icon">🔑</span>
+        <span id="auth-btn-label">Log in</span>
+      </button>
     </div>
   </div>
 </header>
+
+<!-- DATA HEALTH PANEL -->
+<div id="health-backdrop" class="sidebar-backdrop"></div>
+<div id="health-panel" class="health-panel" style="display:none">
+  <div class="health-panel-inner">
+    <div class="health-panel-header">
+      <span>📡 Data Source Status</span>
+      <button id="health-close" class="sidebar-close-btn">✕</button>
+    </div>
+    <div id="health-summary" class="health-summary"></div>
+    <div id="health-rows" class="health-rows">Loading…</div>
+  </div>
+</div>
 
 <!-- SEARCH BAR -->
 <div class="search-section">
   <div class="search-wrap">
     <div class="search-box">
       <span class="search-icon">🔍</span>
-      <input type="text" id="search-input" placeholder="Search products, brands, descriptions…" autocomplete="off" />
+      <input type="text" id="search-input" data-i18n-placeholder="searchPlaceholder"
+             placeholder="Search products, brands, categories… (press / to focus)" autocomplete="off" />
       <button class="search-clear" id="search-clear" title="Clear">✕</button>
     </div>
+    <div id="search-suggestions" class="search-suggestions" style="display:none"></div>
   </div>
 </div>
 
-<!-- TAB BAR -->
-<div class="tab-bar">
-  <button class="tab-btn active" id="tab-products" onclick="switchTab('products')">📦 Products</button>
-  <button class="tab-btn"        id="tab-brands"   onclick="switchTab('brands')">🏷️ Brand Ratings</button>
-</div>
+<!-- CATEGORY QUICK-FILTER PILLS -->
+<div class="cat-pills-row" id="cat-pills-row" style="display:none"></div>
+<div class="cat-pills-row sub-pills-row" id="sub-pills-row" style="display:none"></div>
 
 <!-- MOBILE FILTER TOGGLE -->
 <button class="mobile-filter-btn" id="mobile-filter-btn">
-  <span>⚙</span> Filters
+  <span>⚙</span> <span data-i18n="mobileFilters">Filters</span>
 </button>
 
 <!-- SIDEBAR BACKDROP (mobile) -->
@@ -55,34 +79,33 @@
   <!-- SIDEBAR FILTERS -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <h2>Filters</h2>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="reset-btn" id="reset-filters">Reset all</button>
+      <h2 data-i18n="filtersTitle">Filters</h2>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="share-btn" id="share-filters" title="Copy link to current filters">🔗</button>
+        <button class="reset-btn" id="reset-filters" data-i18n="resetAll">Reset all</button>
         <button class="sidebar-close-btn" id="sidebar-close">✕</button>
       </div>
     </div>
 
     <!-- Main Category -->
     <div class="filter-group">
-      <label class="filter-label">Category</label>
+      <label class="filter-label" data-i18n="category">Category</label>
       <select id="filter-main-category" class="filter-select">
-        <option value="">All categories</option>
-        <!-- populated by JS via /api/categories -->
+        <option value="" data-i18n-opt="allCategories">All categories</option>
       </select>
     </div>
 
-    <!-- Subcategory (shown only when a main category is selected) -->
+    <!-- Subcategory -->
     <div class="filter-group" id="sub-category-group" style="display:none;">
-      <label class="filter-label">Subcategory</label>
+      <label class="filter-label" data-i18n="subcategory">Subcategory</label>
       <select id="filter-category" class="filter-select">
-        <option value="">All subcategories</option>
-        <!-- populated by JS based on main category selection -->
+        <option value="" data-i18n-opt="allSubcategories">All subcategories</option>
       </select>
     </div>
 
     <!-- Min Stars -->
     <div class="filter-group">
-      <label class="filter-label">Min star rating</label>
+      <label class="filter-label" data-i18n="minStarRating">Min star rating</label>
       <div class="range-row">
         <input type="range" id="filter-stars" min="0" max="5" step="0.1" value="0" />
         <span class="range-value" id="stars-val">Any</span>
@@ -94,9 +117,9 @@
       </div>
     </div>
 
-    <!-- Max Return Rate -->
-    <div class="filter-group">
-      <label class="filter-label">Max return rate</label>
+    <!-- Max Return Rate (Alza only — shown/hidden by JS) -->
+    <div class="filter-group" id="return-rate-group" style="display:none">
+      <label class="filter-label" data-i18n="maxReturnRate">Max return rate</label>
       <div class="range-row">
         <input type="range" id="filter-return" min="0" max="1.4" step="0.1" value="1.4" />
         <span class="range-value" id="return-val">1.4%</span>
@@ -110,39 +133,151 @@
 
     <!-- Min Reviews -->
     <div class="filter-group">
-      <label class="filter-label">Min reviews</label>
+      <label class="filter-label" data-i18n="minReviews">Min reviews</label>
       <div class="range-row">
         <input type="range" id="filter-reviews" min="0" max="500" step="5" value="0" />
         <span class="range-value" id="reviews-val">Any</span>
       </div>
+      <div class="star-quick">
+        <button class="star-btn" data-reviews="10">10+</button>
+        <button class="star-btn" data-reviews="50">50+</button>
+        <button class="star-btn" data-reviews="100">100+</button>
+      </div>
+    </div>
+
+    <!-- Price range (min + max) -->
+    <div class="filter-group" id="price-filter-group">
+      <label class="filter-label">Price range <small style="opacity:.6;font-weight:400">(Kč equiv.)</small></label>
+      <div class="price-range-row">
+        <div class="price-input-wrap">
+          <span class="price-input-label">From</span>
+          <input type="number" id="filter-min-price" class="price-number-input" min="0" max="10000000" step="100" placeholder="0" />
+        </div>
+        <span class="price-range-dash">–</span>
+        <div class="price-input-wrap">
+          <span class="price-input-label">To</span>
+          <input type="number" id="filter-max-price" class="price-number-input" min="0" max="10000000" step="100" placeholder="Any" />
+        </div>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-price-preset="0,1000">≤1k</button>
+        <button class="star-btn" data-price-preset="0,5000">≤5k</button>
+        <button class="star-btn" data-price-preset="0,20000">≤20k</button>
+        <button class="star-btn" data-price-preset="5000,20000">5k–20k</button>
+      </div>
+    </div>
+
+    <!-- Has price history -->
+    <div class="filter-group">
+      <label class="filter-label">📈 Price history</label>
+      <button id="history-toggle" class="avoid-btn" data-active="0">
+        📈 Show only products with history
+      </button>
+      <button id="price-drop-toggle" class="avoid-btn" data-active="0" style="margin-top:6px">
+        💸 Show only price drops
+      </button>
     </div>
 
     <!-- Min Recommend Rate -->
-    <div class="filter-group">
-      <label class="filter-label">Min recommend rate</label>
+    <div class="filter-group" id="recommend-filter-group">
+      <label class="filter-label" data-i18n="minRecommend">Min recommend rate</label>
       <div class="range-row">
         <input type="range" id="filter-recommend" min="0" max="100" step="1" value="0" />
         <span class="range-value" id="recommend-val">Any</span>
+      </div>
+      <div class="star-quick">
+        <button class="star-btn" data-rec="90">90%+</button>
+        <button class="star-btn" data-rec="95">95%+</button>
+        <button class="star-btn" data-rec="99">99%+</button>
       </div>
     </div>
 
     <!-- Source -->
     <div class="filter-group">
-      <label class="filter-label">Source</label>
+      <label class="filter-label" data-i18n="source">Source</label>
       <select id="filter-source" class="filter-select">
         <option value="">All sources</option>
-        <option value="alza">Alza.cz</option>
-        <option value="heureka">Heureka.cz</option>
-        <option value="zbozi">Zbozi.cz</option>
-        <option value="amazon">Amazon.de</option>
+        <optgroup label="🇨🇿 Czech Republic">
+          <option value="alza.cz"    data-market="CZ">Alza.cz</option>
+          <option value="heureka.cz" data-market="CZ">Heureka.cz</option>
+          <option value="zbozi.cz"   data-market="CZ">Zbozi.cz</option>
+          <option value="datart.cz"  data-market="CZ">Datart.cz</option>
+          <option value="planeo.cz"  data-market="CZ">Planeo.cz</option>
+        </optgroup>
+        <optgroup label="🇸🇰 Slovakia">
+          <option value="heureka.sk" data-market="SK">Heureka.sk</option>
+        </optgroup>
+        <optgroup label="🇩🇪 Germany">
+          <option value="amazon_de"     data-market="DE">Amazon.de</option>
+          <option value="otto_de"       data-market="DE">Otto.de</option>
+          <option value="saturn_de"     data-market="DE">Saturn.de</option>
+          <option value="mediamarkt"    data-market="DE">MediaMarkt</option>
+          <option value="testberichte"  data-market="DE">Testberichte.de</option>
+          <option value="conrad"        data-market="DE">Conrad.de</option>
+        </optgroup>
+        <optgroup label="🇦🇹 Austria">
+          <option value="geizhals"      data-market="AT">Geizhals.at</option>
+        </optgroup>
+        <optgroup label="🇨🇭 Switzerland">
+          <option value="digitec"       data-market="CH">Digitec.ch</option>
+        </optgroup>
+        <optgroup label="🇫🇷 France">
+          <option value="fnac"          data-market="FR">Fnac.fr</option>
+          <option value="fr_ir"         data-market="FR">Indice de Réparabilité (Gov)</option>
+        </optgroup>
+        <optgroup label="🇵🇱 Poland">
+          <option value="ceneo"         data-market="PL">Ceneo.pl</option>
+        </optgroup>
+        <optgroup label="🇳🇱 Netherlands">
+          <option value="coolblue"      data-market="NL">Coolblue.nl</option>
+        </optgroup>
+        <optgroup label="🇸🇪 Sweden">
+          <option value="prisjakt"      data-market="SE">Prisjakt.nu</option>
+          <option value="pricerunner_se" data-market="SE">PriceRunner.se</option>
+        </optgroup>
+        <optgroup label="🇩🇰 Denmark">
+          <option value="pricerunner"   data-market="DK">PriceRunner.dk</option>
+        </optgroup>
+        <optgroup label="🌐 Global">
+          <option value="amazon_us"     data-market="US">Amazon.com (US)</option>
+        </optgroup>
       </select>
     </div>
 
     <!-- Quality keywords -->
     <div class="filter-group">
-      <label class="filter-label">Quality signals</label>
-      <div class="kw-filter-pills" id="kw-filter-pills">
-        <!-- populated by JS -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="filter-label" style="margin-bottom:0" data-i18n="qualitySignals">Quality signals</label>
+        <button id="kw-clear-btn" class="kw-clear-btn" style="display:none" title="Clear filter">✕ Clear</button>
+      </div>
+      <div class="kw-filter-pills" id="kw-filter-pills"></div>
+    </div>
+
+    <!-- Brand filter -->
+    <div class="filter-group">
+      <label class="filter-label">🏷️ Brand</label>
+      <input type="text" id="filter-brand" class="filter-select" placeholder="e.g. Samsung, Apple…"
+             list="brand-autocomplete" spellcheck="false"
+             style="cursor:text;background-image:none;padding-right:10px" />
+      <datalist id="brand-autocomplete"></datalist>
+    </div>
+
+    <!-- With photos only -->
+    <div class="filter-group">
+      <label class="filter-label">📷 Photos</label>
+      <button id="photos-toggle" class="avoid-btn" data-active="0">
+        Show only products with photos
+      </button>
+    </div>
+
+    <!-- Products to avoid -->
+    <div class="filter-group">
+      <label class="filter-label">⚠️ Problematic products</label>
+      <button id="avoid-toggle" class="avoid-btn" data-active="0">
+        Show products to avoid
+      </button>
+      <div id="avoid-info" class="avoid-info" style="display:none">
+        Showing products rated &lt;3.5★ or &lt;65% recommend with 100+ reviews
       </div>
     </div>
   </aside>
@@ -152,95 +287,262 @@
 
     <!-- TOOLBAR -->
     <div class="toolbar">
-      <div class="results-info" id="results-info">Loading…</div>
+      <div class="toolbar-left">
+        <div class="results-info" id="results-info">Loading…</div>
+        <button class="best-picks-btn" id="best-picks-btn" title="Top-rated products (≥93% recommend, ≥20 reviews)">🏆 Best Picks</button>
+        <button class="export-btn" id="export-csv-btn" title="Download visible results as CSV">⬇ CSV</button>
+      </div>
       <div class="toolbar-right">
-        <label class="sort-label">Sort by</label>
+        <label class="sort-label" data-i18n="sortBy">Sort by</label>
         <select id="sort-by" class="filter-select sort-select">
-          <option value="ReturnRate_pct">Return rate ↑</option>
-          <option value="AvgStarRating_desc">Stars ↓</option>
-          <option value="RecommendRate_pct_desc">Recommend % ↓</option>
-          <option value="ReviewsCount_desc">Most reviews</option>
-          <option value="Price_CZK">Price ↑</option>
-          <option value="Price_CZK_desc">Price ↓</option>
-          <option value="Name">Name A–Z</option>
+          <!-- populated by buildSortOptions() on load and language change -->
         </select>
         <div class="view-toggle">
           <button class="view-btn active" id="view-grid" title="Grid view">⊞</button>
           <button class="view-btn" id="view-list" title="List view">☰</button>
+          <button class="view-btn" id="view-cross-market" title="Cross-market comparison">🌍</button>
+          <button class="view-btn" id="view-movers" title="Trending: products with the biggest price / rating / review changes vs N days ago">🔥</button>
+          <button class="view-btn" id="view-brands" title="Brand leaderboard — average ratings across all brands">🏷️</button>
+          <button class="view-btn" id="view-top-picks" title="Best products by category">🏆</button>
         </div>
       </div>
     </div>
+
+    <!-- ACTIVE FILTERS BAR -->
+    <div id="active-filters-bar" style="display:none"></div>
 
     <!-- PRODUCT GRID -->
     <div class="product-grid" id="product-grid">
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>Loading products…</p>
+        <p data-i18n="loading">Loading products…</p>
       </div>
     </div>
 
     <!-- PAGINATION -->
     <div class="pagination" id="pagination"></div>
 
+    <!-- LOAD MORE -->
+    <div class="load-more-wrap">
+      <button id="load-more-btn" class="load-more-btn" style="display:none" onclick="loadMoreProducts()">Load more</button>
+    </div>
+
+    <!-- MOVERS VIEW (hidden by default, toggled by toolbar button) -->
+    <div id="movers-panel" style="display:none">
+      <div class="movers-toolbar">
+        <span class="movers-title">🔥 Trending Changes</span>
+        <select id="movers-metric" class="filter-select" title="Metric to compare">
+          <option value="recommend">Recommend rate</option>
+          <option value="stars">Star rating</option>
+          <option value="price">Price (CZK)</option>
+        </select>
+        <select id="movers-days" class="filter-select" title="Min. tracking age — only show products tracked for at least this long">
+          <option value="3">tracked ≥ 3 days</option>
+          <option value="7" selected>tracked ≥ 1 week</option>
+          <option value="14">tracked ≥ 2 weeks</option>
+          <option value="30">tracked ≥ 1 month</option>
+          <option value="60">tracked ≥ 2 months</option>
+        </select>
+        <button id="movers-refresh-btn" class="star-btn" style="padding:4px 12px">Refresh</button>
+        <span id="movers-status" style="font-size:0.8em;color:#888"></span>
+      </div>
+      <div id="movers-grid"></div>
+    </div>
+
+    <!-- BRANDS VIEW (hidden by default, toggled by toolbar button) -->
+    <div id="brands-panel" style="display:none">
+      <div class="brands-toolbar">
+        <span class="brands-title">🏷️ Brand Leaderboard</span>
+        <div class="brands-controls">
+          <label style="font-size:0.85em;color:#888">Min products:</label>
+          <select id="brands-min-products" class="filter-select" style="width:auto">
+            <option value="1">1+</option>
+            <option value="3" selected>3+</option>
+            <option value="10">10+</option>
+            <option value="25">25+</option>
+            <option value="50">50+</option>
+          </select>
+          <input type="text" id="brands-search" class="search-box" placeholder="Filter brands…"
+                 style="padding:4px 10px;width:180px;font-size:0.85em;border:1px solid #333;border-radius:6px;background:#1a1a1a;color:#e0e0e0" />
+        </div>
+        <span id="brands-status" style="font-size:0.8em;color:#888"></span>
+      </div>
+      <div id="brands-grid"></div>
+    </div>
+
+    <!-- CROSS-MARKET VIEW (hidden by default, toggled by toolbar button) -->
+    <div id="cross-market-panel" style="display:none">
+      <div class="cross-market-toolbar">
+        <span class="cross-market-title">🌍 Cross-Market Product Matches</span>
+        <div class="cm-quality-chips" id="cm-quality-chips">
+          <button class="cm-qchip active" data-thresh="0">All</button>
+          <button class="cm-qchip" data-thresh="90">90%+</button>
+          <button class="cm-qchip" data-thresh="93">93%+</button>
+          <button class="cm-qchip" data-thresh="97">97%+</button>
+        </div>
+        <select id="cm-min-markets" class="filter-select" title="Minimum markets">
+          <option value="2">2+ markets</option>
+          <option value="3">3+ markets</option>
+        </select>
+        <button id="cm-refresh-btn" class="star-btn" style="padding:4px 12px">Refresh</button>
+        <span id="cm-status" style="font-size:0.8em;color:#888"></span>
+      </div>
+      <div id="cross-market-grid"></div>
+    </div>
+
+    <!-- TOP-PICKS PANEL (hidden by default, toggled by toolbar button) -->
+    <div id="top-picks-panel" style="display:none">
+      <div class="top-picks-toolbar">
+        <span class="top-picks-title">🏆 Best Products by Category</span>
+        <div class="tp-quality-chips" id="tp-quality-chips">
+          <button class="cm-qchip active" data-thresh="93" data-reviews="20">93%+</button>
+          <button class="cm-qchip" data-thresh="95" data-reviews="20">95%+</button>
+          <button class="cm-qchip" data-thresh="97" data-reviews="20">97%+</button>
+        </div>
+        <button id="tp-refresh-btn" class="star-btn" style="padding:4px 12px">Refresh</button>
+        <span id="tp-status" style="font-size:0.8em;color:#888"></span>
+      </div>
+      <div id="top-picks-grid"></div>
+    </div>
+
   </main>
+</div>
+
+<!-- AUTH MODAL -->
+<div class="modal-overlay" id="auth-modal-overlay" style="display:none">
+  <div class="modal auth-modal" id="auth-modal">
+    <button class="modal-close" id="auth-modal-close">✕</button>
+    <div class="auth-modal-content">
+
+      <!-- Tab switcher -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login">Log in</button>
+        <button class="auth-tab" id="tab-register">Join Institut Kvality</button>
+        <a href="https://institutkvality.vercel.app/en/contribute" target="_blank" rel="noopener"
+           class="auth-tab auth-tab-external" style="margin-left:auto;font-size:0.8em;color:#888;text-decoration:none;display:flex;align-items:center;gap:4px">
+          institutkvality.cz ↗
+        </a>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <form id="login-form" class="auth-form">
+        <h2 class="auth-title">Welcome back</h2>
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="login-email" autocomplete="email" placeholder="you@example.com" required />
+        </div>
+        <div class="auth-field">
+          <label>Password</label>
+          <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••" required />
+        </div>
+        <div class="auth-error" id="login-error"></div>
+        <button type="submit" class="auth-submit" id="login-submit">Log in</button>
+      </form>
+
+      <!-- REGISTER FORM -->
+      <form id="register-form" class="auth-form" style="display:none">
+        <h2 class="auth-title">Create your research account</h2>
+        <p class="auth-subtitle">Join the distributed quality-data network. Your contributions help build
+        an open, crowd-verified product database — independent of any retailer.</p>
+
+        <div class="auth-field">
+          <label>Email</label>
+          <input type="email" id="reg-email" autocomplete="email" placeholder="you@example.com" required />
+        </div>
+        <div class="auth-field">
+          <label>Password <span class="auth-hint">(min 8 characters)</span></label>
+          <input type="password" id="reg-password" autocomplete="new-password" placeholder="••••••••" required minlength="8" />
+        </div>
+        <div class="auth-field">
+          <label>Country <span class="auth-hint">(determines which sources you can contribute)</span></label>
+          <select id="reg-country" required>
+            <option value="">— select —</option>
+            <option value="CZ">🇨🇿 Czech Republic</option>
+            <option value="SK">🇸🇰 Slovakia</option>
+            <option value="DE">🇩🇪 Germany</option>
+            <option value="AT">🇦🇹 Austria</option>
+            <option value="CH">🇨🇭 Switzerland</option>
+            <option value="FR">🇫🇷 France</option>
+            <option value="PL">🇵🇱 Poland</option>
+            <option value="NL">🇳🇱 Netherlands</option>
+            <option value="SE">🇸🇪 Sweden</option>
+            <option value="DK">🇩🇰 Denmark</option>
+            <option value="US">🇺🇸 United States</option>
+            <option value="GB">🇬🇧 United Kingdom</option>
+          </select>
+        </div>
+
+        <div class="auth-research-questions">
+          <p class="auth-research-intro">Three quick research questions — helps us understand who is building this database:</p>
+          <div class="auth-field">
+            <label>1. What is your primary reason for researching product quality?</label>
+            <textarea id="reg-q1" rows="2" placeholder="e.g. I want to make more informed purchase decisions…" required></textarea>
+          </div>
+          <div class="auth-field">
+            <label>2. Which product categories do you think are most affected by planned obsolescence?</label>
+            <textarea id="reg-q2" rows="2" placeholder="e.g. Smartphones, printers, household appliances…" required></textarea>
+          </div>
+          <div class="auth-field">
+            <label>3. How do you currently discover high-quality products?</label>
+            <textarea id="reg-q3" rows="2" placeholder="e.g. Word of mouth, online reviews, specialist forums…" required></textarea>
+          </div>
+        </div>
+
+        <div class="auth-error" id="reg-error"></div>
+        <button type="submit" class="auth-submit" id="reg-submit">Create account &amp; join</button>
+      </form>
+
+      <!-- LOGGED-IN STATE -->
+      <div id="user-panel" class="user-panel" style="display:none">
+        <div class="user-welcome">
+          <span class="user-avatar">👤</span>
+          <div>
+            <div class="user-email" id="user-email"></div>
+            <div class="user-country" id="user-country"></div>
+          </div>
+        </div>
+        <div class="user-stats">
+          <div class="user-stat">
+            <span class="user-stat-val" id="user-contrib-count">—</span>
+            <span class="user-stat-label">contributions</span>
+          </div>
+          <div class="user-stat">
+            <span class="user-stat-val" id="contrib-total-staged">—</span>
+            <span class="user-stat-label">staged globally</span>
+          </div>
+          <div class="user-stat">
+            <span class="user-stat-val" id="contrib-total-merged">—</span>
+            <span class="user-stat-label">merged to DB</span>
+          </div>
+        </div>
+        <div class="user-download-section">
+          <p>To contribute product data, run the scraper on your machine:</p>
+          <div class="user-token-box">
+            <code id="contrib-cmd">python3 contrib_scraper.py --token <span id="user-token-display">…</span></code>
+            <button class="copy-token-btn" id="copy-token-btn" title="Copy to clipboard">📋</button>
+          </div>
+          <a href="/static/contrib_scraper.py" download class="download-btn">⬇ Download contrib_scraper.py</a>
+        </div>
+        <button class="auth-logout-btn" id="auth-logout">Log out</button>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- PRODUCT DETAIL MODAL -->
 <div class="modal-overlay" id="modal-overlay">
   <div class="modal" id="modal">
-    <button class="modal-close" id="modal-close">✕</button>
-    <div class="modal-content" id="modal-content"></div>
-  </div>
-</div>
-
-<!-- BRANDS PANEL (hidden by default) -->
-<div id="brands-panel" style="display:none">
-  <div class="brands-toolbar">
-    <div class="brands-search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="brands-search" placeholder="Search brand…" autocomplete="off" />
+    <div class="modal-nav-bar">
+      <button class="modal-nav-btn" id="modal-prev" title="Previous product (← arrow key)" onclick="navigateModal(-1)">‹</button>
+      <button class="modal-nav-btn" id="modal-next" title="Next product (→ arrow key)" onclick="navigateModal(1)">›</button>
+      <button class="modal-close" id="modal-close">✕</button>
     </div>
-    <select id="brands-category" class="filter-select">
-      <option value="">All categories</option>
-    </select>
-    <select id="brands-sort" class="filter-select">
-      <option value="avg_score">Avg score ↓</option>
-      <option value="openrepair_score">Fix rate ↓</option>
-      <option value="french_score">EU Index ↓</option>
-      <option value="yale_score">Yale reliability ↓</option>
-      <option value="ifixit_score">iFixit ↓</option>
-      <option value="num_sources">Most sources ↓</option>
-      <option value="brand">Brand A–Z</option>
-    </select>
-    <div class="brands-count" id="brands-count"></div>
-  </div>
-
-  <div class="brands-legend">
-    <span class="legend-item"><span class="legend-dot" style="background:#1d4ed8"></span>🇫🇷 EU Index</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#0891b2"></span>🔨 Fix Rate</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#059669"></span>🏠 Yale</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#e05b2a"></span>🔧 iFixit</span>
-    <span class="legend-item"><span class="legend-dot" style="background:#7c3aed"></span>♾️ BIFL</span>
-  </div>
-
-  <div class="brands-table-wrap">
-    <table class="brands-table" id="brands-table">
-      <thead>
-        <tr>
-          <th>Brand</th>
-          <th>Categories</th>
-          <th class="score-col">🇫🇷 EU Index</th>
-          <th class="score-col">🔨 Fix Rate</th>
-          <th class="score-col">🏠 Yale</th>
-          <th class="score-col">🔧 iFixit</th>
-          <th class="score-col">♾️ BIFL</th>
-          <th class="score-col">Avg</th>
-        </tr>
-      </thead>
-      <tbody id="brands-tbody">
-        <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Loading…</td></tr>
-      </tbody>
-    </table>
+    <div class="modal-content" id="modal-content"></div>
+    <div class="modal-history" id="modal-history" style="display:none">
+      <div class="modal-history-title">📈 Rating history</div>
+      <div id="modal-history-chart"></div>
+    </div>
   </div>
 </div>
 

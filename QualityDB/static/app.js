@@ -14,6 +14,15 @@ let activeKeyword = "";
 let activeBrand   = "";  // exact brand filter set from brands leaderboard
 let avoidMode = false;
 let photosMode = false;
+let bestPicksMode = false;   // true when the 🏆 Best Picks preset is active
+// Cross-market quality filter state
+let _cmQualityThresh = 0;   // 0 = All, 90/93/97 = threshold
+let _cmRawData = null;      // cached raw cross-market API response for client-side re-filter
+// Top-picks panel state
+let _tpData     = null;     // cached top-picks API response
+let _tpThresh   = 93;       // currently selected quality threshold
+let _tpMinRev   = 20;       // currently selected min reviews
+let _tpOpenCat  = null;     // currently expanded category in accordion
 let categoriesTree = [];   // [{main, subs:[{sub,count}]}]
 // ProductURL → [rec_delta, stars_delta, price_delta, days, first_price, last_price]
 let snapshotDeltaMap = new Map();
@@ -1099,6 +1108,11 @@ function applyUrlFilters() {
     const val = sp.get("sort") + (dir === "desc" ? "_desc" : "");
     if (sortEl) sortEl.value = val;
   }
+  // Detect Best Picks preset from URL
+  if (sp.get("rec") === "93" && sp.get("rev") === "20") {
+    bestPicksMode = true;
+    document.getElementById("best-picks-btn")?.classList.add("active");
+  }
   // Store pending category for after subcats load
   if (sp.get("cat")) window._pendingCategory = sp.get("cat");
 }
@@ -1958,6 +1972,7 @@ function renderActiveFilters() {
   const f = getFilters();
   const chips = [];
 
+  if (bestPicksMode)      chips.push({ label: "🏆 Best Picks",        key: "bestpicks" });
   if (f.q)                chips.push({ label: `"${f.q}"`,            key: "q" });
   if (f.main_category)    chips.push({ label: f.main_category.replace(/^[^\w]/,"").trim(), key: "mc" });
   if (f.category)         chips.push({ label: f.category,            key: "cat" });
@@ -1991,13 +2006,25 @@ function renderActiveFilters() {
   bar.querySelectorAll(".af-chip").forEach(chip => {
     chip.addEventListener("click", () => {
       const key = chip.dataset.key;
+      if (key === "bestpicks") {
+        bestPicksMode = false;
+        document.getElementById("best-picks-btn")?.classList.remove("active");
+        const recSlider = document.getElementById("filter-recommend");
+        const recVal    = document.getElementById("recommend-val");
+        if (recSlider) recSlider.value = 0;
+        if (recVal)    recVal.textContent = "Any";
+        const revSlider = document.getElementById("filter-reviews");
+        const revVal    = document.getElementById("reviews-val");
+        if (revSlider) revSlider.value = 0;
+        if (revVal)    revVal.textContent = "Any";
+      }
       if (key === "q")      { document.getElementById("search-input").value = ""; document.getElementById("search-clear").style.display = "none"; }
       if (key === "mc")     { document.getElementById("filter-main-category").value = ""; populateSubcategories(""); const cr=document.getElementById("cat-pills-row"); if(cr) cr.querySelectorAll(".cat-pill").forEach(b=>b.classList.remove("cat-pill-active")); renderSubCatPills(""); }
       if (key === "cat")    { document.getElementById("filter-category").value = ""; }
       if (key === "src")    { document.getElementById("filter-source").value = ""; }
       if (key === "stars")  { document.getElementById("filter-stars").value = 0; document.getElementById("stars-val").textContent = "Any"; document.querySelectorAll(".star-btn[data-val]").forEach(b=>b.classList.remove("active")); }
-      if (key === "rev")    { document.getElementById("filter-reviews").value = 0; document.getElementById("reviews-val").textContent = "Any"; }
-      if (key === "rec")    { document.getElementById("filter-recommend").value = 0; document.getElementById("recommend-val").textContent = "Any"; }
+      if (key === "rev")    { document.getElementById("filter-reviews").value = 0; document.getElementById("reviews-val").textContent = "Any"; if (bestPicksMode) { bestPicksMode = false; document.getElementById("best-picks-btn")?.classList.remove("active"); } }
+      if (key === "rec")    { document.getElementById("filter-recommend").value = 0; document.getElementById("recommend-val").textContent = "Any"; if (bestPicksMode) { bestPicksMode = false; document.getElementById("best-picks-btn")?.classList.remove("active"); } }
       if (key === "minprice"){ const p=document.getElementById("filter-min-price"); if(p) p.value=""; document.querySelectorAll(".star-btn[data-price-preset]").forEach(b=>b.classList.remove("active")); }
       if (key === "price")  { const p=document.getElementById("filter-max-price"); if(p) p.value=""; document.querySelectorAll(".star-btn[data-price-preset]").forEach(b=>b.classList.remove("active")); }
       if (key === "kw")     { activeKeyword = ""; document.querySelectorAll(".kw-pill").forEach(b=>b.classList.remove("active")); }
@@ -2897,6 +2924,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset avoid mode
     avoidMode = false;
     if (avoidToggle) { avoidToggle.dataset.active = "0"; avoidToggle.textContent = "Show products to avoid"; avoidToggle.classList.remove("avoid-btn-active"); }
+    // Reset best picks mode
+    bestPicksMode = false;
+    document.getElementById("best-picks-btn")?.classList.remove("active");
     if (avoidInfo) avoidInfo.style.display = "none";
     document.getElementById("sort-by").value = "cat_rank";  // restore default
     // Restore recommend filter (hidden when amazon_us was selected)
@@ -3061,6 +3091,11 @@ document.addEventListener("DOMContentLoaded", () => {
           brandsPanel.style.display = "none";
           document.getElementById("view-brands")?.classList.remove("active");
         }
+        const tpPanelCm = document.getElementById("top-picks-panel");
+        if (tpPanelCm && tpPanelCm.style.display !== "none") {
+          tpPanelCm.style.display = "none";
+          document.getElementById("view-top-picks")?.classList.remove("active");
+        }
         panel.style.display = "";
         grid.style.display  = "none";
         pgn.style.display   = "none";
@@ -3074,6 +3109,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("cm-refresh-btn")?.addEventListener("click", loadCrossMarket);
     document.getElementById("cm-min-markets")?.addEventListener("change", loadCrossMarket);
+    // Quality threshold chips — filter+sort client-side without re-fetching
+    document.getElementById("cm-quality-chips")?.addEventListener("click", e => {
+      const chip = e.target.closest(".cm-qchip");
+      if (!chip) return;
+      document.querySelectorAll("#cm-quality-chips .cm-qchip").forEach(c => c.classList.remove("active"));
+      chip.classList.add("active");
+      _cmQualityThresh = parseInt(chip.dataset.thresh, 10);
+      if (_cmRawData) renderCrossMarket(_cmRawData);
+    });
   }
 });
 
@@ -3095,103 +3139,137 @@ async function loadCrossMarket() {
     const res  = await fetch(`${API_BASE}/api/cross-market?min_markets=${minM}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-
     grid.dataset.loaded = "1";
-    if (status) status.textContent = `${data.length} product groups`;
-
-    if (!data.length) {
-      grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:#888">No cross-market matches found.</div>';
-      return;
-    }
-
-    grid.innerHTML = data.map(g => {
-      // One best listing per market (most reviewed variant)
-      const byCountry = {};
-      for (const p of g.products) {
-        if (!byCountry[p.country] || (p.reviews||0) > (byCountry[p.country].reviews||0)) {
-          byCountry[p.country] = p;
-        }
-      }
-      const listings = Object.values(byCountry)
-        .sort((a,b) => a.country.localeCompare(b.country));
-
-      // Price range display (use per-listing currency where possible)
-      const prices = listings.filter(p => p.price != null);
-      const hasCzk  = prices.some(p => p.currency === "CZK");
-      const hasEur  = prices.some(p => p.currency !== "CZK");
-      let priceRangeStr = "";
-      if (hasCzk) {
-        const czkPrices = prices.filter(p => p.currency === "CZK");
-        const lo = Math.round(Math.min(...czkPrices.map(p=>p.price))).toLocaleString();
-        const hi = Math.round(Math.max(...czkPrices.map(p=>p.price))).toLocaleString();
-        priceRangeStr += `CZK ${lo === hi ? lo : lo + "–" + hi}`;
-      }
-      if (hasEur) {
-        const eurPrices = prices.filter(p => p.currency !== "CZK");
-        const lo = Math.round(Math.min(...eurPrices.map(p=>p.price))).toLocaleString();
-        const hi = Math.round(Math.max(...eurPrices.map(p=>p.price))).toLocaleString();
-        const curr = eurPrices[0].currency || "EUR";
-        priceRangeStr += (priceRangeStr ? " · " : "") + `${curr} ${lo === hi ? lo : lo + "–" + hi}`;
-      }
-
-      const rates = listings.filter(p => p.rate != null).map(p => p.rate);
-      const avgRate = rates.length ? Math.round(rates.reduce((a,b)=>a+b,0)/rates.length) : null;
-
-      // Market flag chips for header
-      const flagChips = listings.map(p =>
-        `<span class="cm-flag-chip" title="${escHtml(p.source)}">${FLAG[p.country] || p.country}</span>`
-      ).join("");
-
-      // Brand logo
-      const brandStr = g.brand.replace(/[A-Z]{1}[a-z]/g, s => " "+s).trim() || g.token;
-      const _bLogoUrl = brandLogoUrl(brandStr);
-      const bLogo = _bLogoUrl
-        ? `<img class="cm-brand-logo" src="${escHtml(_bLogoUrl)}" alt="${escHtml(brandStr)}" onerror="this.style.display='none'">`
-        : "";
-
-      // Product rows
-      const rows = listings.map(p => {
-        const flag   = FLAG[p.country] || p.country;
-        const name   = escHtml(p.name);
-        const rate   = p.rate != null ? `<span class="cm-rate-val">${Math.round(p.rate)}%</span>` : "";
-        const revN = p.reviews ? Math.round(p.reviews) : 0;
-        const reviews = revN ? `<span class="cm-reviews-val">${revN >= 1000 ? (revN/1000).toFixed(1).replace('.0','') + 'k' : revN} rev</span>` : "";
-        const price  = p.price != null
-          ? `<span class="cm-price-val">${Math.round(p.price).toLocaleString()} ${p.currency || "CZK"}</span>`
-          : "";
-        const srcLabel = SOURCE_LABELS[p.source] || p.source;
-        const link   = p.url
-          ? `<a class="cm-product-link" href="${escHtml(p.url)}" target="_blank" title="${escHtml(p.name)}">→</a>`
-          : "";
-        return `<li class="cm-product-row">
-          <span class="cm-product-flag">${flag}</span>
-          <span class="cm-product-name" title="${escHtml(p.name)}">${name}</span>
-          <span class="cm-product-stats">${rate}${reviews ? " · " + reviews : ""}${price ? " · " + price : ""}</span>
-          <span class="cm-product-source">${escHtml(srcLabel)}</span>
-          ${link}
-        </li>`;
-      }).join("");
-
-      return `<div class="cm-card">
-        <div class="cm-card-header">
-          ${bLogo}
-          <div class="cm-card-title">
-            <span class="cm-token">${escHtml(g.token)}</span>
-            <div class="cm-flag-row">${flagChips}</div>
-          </div>
-          <div class="cm-card-meta">
-            ${avgRate != null ? `<span class="cm-avg-rate">${avgRate}%</span>` : ""}
-            ${priceRangeStr ? `<span class="cm-price-range">💰 ${priceRangeStr}</span>` : ""}
-          </div>
-        </div>
-        <ul class="cm-products">${rows}</ul>
-      </div>`;
-    }).join("");
-
+    _cmRawData = data;
+    renderCrossMarket(data);
   } catch (e) {
     grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:#c62828">Error: ${escHtml(e.message)}</div>`;
     if (status) status.textContent = "Failed";
   }
+}
+
+/** Quality badge for a cross-market group (same thresholds as main grid). */
+function cmQualityBadge(avgRate) {
+  if (avgRate == null) return "";
+  if (avgRate >= 97) return `<span class="quality-badge badge-excellent" style="font-size:0.75em">🏆 Top Pick</span>`;
+  if (avgRate >= 93) return `<span class="quality-badge badge-excellent" style="font-size:0.75em">⭐ Excellent</span>`;
+  if (avgRate >= 88) return `<span class="quality-badge badge-good" style="font-size:0.75em">✅ Good</span>`;
+  return "";
+}
+
+/** Pure render — applies _cmQualityThresh filter + sort, no re-fetch needed. */
+function renderCrossMarket(data) {
+  const grid   = document.getElementById("cross-market-grid");
+  const status = document.getElementById("cm-status");
+  if (!grid || !data) return;
+
+  // ── Helper: compute avgRate for a group ──────────────────────────────────
+  function groupAvgRate(g) {
+    const rates = g.products.filter(p => p.rate != null).map(p => p.rate);
+    return rates.length ? rates.reduce((a, b) => a + b, 0) / rates.length : null;
+  }
+
+  // ── Quality filter ───────────────────────────────────────────────────────
+  let groups = _cmQualityThresh > 0
+    ? data.filter(g => { const r = groupAvgRate(g); return r != null && r >= _cmQualityThresh; })
+    : data;
+
+  // ── Sort by avgRate DESC when threshold is active ────────────────────────
+  if (_cmQualityThresh > 0) {
+    groups = [...groups].sort((a, b) => (groupAvgRate(b) || 0) - (groupAvgRate(a) || 0));
+  }
+
+  if (status) status.textContent = `${groups.length} of ${data.length} product groups`;
+
+  if (!groups.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:20px;color:#888">No cross-market matches found for this quality threshold.</div>';
+    return;
+  }
+
+  grid.innerHTML = groups.map(g => {
+    // One best listing per market (most reviewed variant)
+    const byCountry = {};
+    for (const p of g.products) {
+      if (!byCountry[p.country] || (p.reviews||0) > (byCountry[p.country].reviews||0)) {
+        byCountry[p.country] = p;
+      }
+    }
+    const listings = Object.values(byCountry)
+      .sort((a,b) => a.country.localeCompare(b.country));
+
+    // Price range display (use per-listing currency where possible)
+    const prices = listings.filter(p => p.price != null);
+    const hasCzk  = prices.some(p => p.currency === "CZK");
+    const hasEur  = prices.some(p => p.currency !== "CZK");
+    let priceRangeStr = "";
+    if (hasCzk) {
+      const czkPrices = prices.filter(p => p.currency === "CZK");
+      const lo = Math.round(Math.min(...czkPrices.map(p=>p.price))).toLocaleString();
+      const hi = Math.round(Math.max(...czkPrices.map(p=>p.price))).toLocaleString();
+      priceRangeStr += `CZK ${lo === hi ? lo : lo + "–" + hi}`;
+    }
+    if (hasEur) {
+      const eurPrices = prices.filter(p => p.currency !== "CZK");
+      const lo = Math.round(Math.min(...eurPrices.map(p=>p.price))).toLocaleString();
+      const hi = Math.round(Math.max(...eurPrices.map(p=>p.price))).toLocaleString();
+      const curr = eurPrices[0].currency || "EUR";
+      priceRangeStr += (priceRangeStr ? " · " : "") + `${curr} ${lo === hi ? lo : lo + "–" + hi}`;
+    }
+
+    const rates = listings.filter(p => p.rate != null).map(p => p.rate);
+    const avgRate = rates.length ? Math.round(rates.reduce((a,b)=>a+b,0)/rates.length) : null;
+
+    // Market flag chips for header
+    const flagChips = listings.map(p =>
+      `<span class="cm-flag-chip" title="${escHtml(p.source)}">${FLAG[p.country] || p.country}</span>`
+    ).join("");
+
+    // Brand logo
+    const brandStr = g.brand.replace(/[A-Z]{1}[a-z]/g, s => " "+s).trim() || g.token;
+    const _bLogoUrl = brandLogoUrl(brandStr);
+    const bLogo = _bLogoUrl
+      ? `<img class="cm-brand-logo" src="${escHtml(_bLogoUrl)}" alt="${escHtml(brandStr)}" onerror="this.style.display='none'">`
+      : "";
+
+    // Product rows
+    const rows = listings.map(p => {
+      const flag   = FLAG[p.country] || p.country;
+      const name   = escHtml(p.name);
+      const rate   = p.rate != null ? `<span class="cm-rate-val">${Math.round(p.rate)}%</span>` : "";
+      const revN = p.reviews ? Math.round(p.reviews) : 0;
+      const reviews = revN ? `<span class="cm-reviews-val">${revN >= 1000 ? (revN/1000).toFixed(1).replace('.0','') + 'k' : revN} rev</span>` : "";
+      const price  = p.price != null
+        ? `<span class="cm-price-val">${Math.round(p.price).toLocaleString()} ${p.currency || "CZK"}</span>`
+        : "";
+      const srcLabel = SOURCE_LABELS[p.source] || p.source;
+      const link   = p.url
+        ? `<a class="cm-product-link" href="${escHtml(p.url)}" target="_blank" title="${escHtml(p.name)}">→</a>`
+        : "";
+      return `<li class="cm-product-row">
+        <span class="cm-product-flag">${flag}</span>
+        <span class="cm-product-name" title="${escHtml(p.name)}">${name}</span>
+        <span class="cm-product-stats">${rate}${reviews ? " · " + reviews : ""}${price ? " · " + price : ""}</span>
+        <span class="cm-product-source">${escHtml(srcLabel)}</span>
+        ${link}
+      </li>`;
+    }).join("");
+
+    return `<div class="cm-card">
+      <div class="cm-card-header">
+        ${bLogo}
+        <div class="cm-card-title">
+          <span class="cm-token">${escHtml(g.token)}</span>
+          <div class="cm-flag-row">${flagChips}</div>
+        </div>
+        <div class="cm-card-meta">
+          ${cmQualityBadge(avgRate)}
+          ${avgRate != null ? `<span class="cm-avg-rate">${avgRate}%</span>` : ""}
+          ${priceRangeStr ? `<span class="cm-price-range">💰 ${priceRangeStr}</span>` : ""}
+        </div>
+      </div>
+      <ul class="cm-products">${rows}</ul>
+    </div>`;
+  }).join("");
 }
 
 // ── Data Health Panel ─────────────────────────────────────────────────────────
@@ -3330,6 +3408,11 @@ function initMoversPanel() {
       if (brandsPanel && brandsPanel.style.display !== "none") {
         brandsPanel.style.display = "none";
         document.getElementById("view-brands")?.classList.remove("active");
+      }
+      const tpPanelMv = document.getElementById("top-picks-panel");
+      if (tpPanelMv && tpPanelMv.style.display !== "none") {
+        tpPanelMv.style.display = "none";
+        document.getElementById("view-top-picks")?.classList.remove("active");
       }
       panel.style.display = "";
       grid.style.display  = "none";
@@ -3926,6 +4009,11 @@ function initBrandsPanel() {
         cmPanel.style.display = "none";
         document.getElementById("view-cross-market")?.classList.remove("active");
       }
+      const tpPanelBr = document.getElementById("top-picks-panel");
+      if (tpPanelBr && tpPanelBr.style.display !== "none") {
+        tpPanelBr.style.display = "none";
+        document.getElementById("view-top-picks")?.classList.remove("active");
+      }
       panel.style.display = "";
       grid.style.display  = "none";
       pgn.style.display   = "none";
@@ -4262,6 +4350,246 @@ function initAuthModal() {
 }
 
 document.addEventListener("DOMContentLoaded", initAuthModal);
+
+// ── Best Picks preset button ───────────────────────────────────────────────────
+
+function initBestPicksBtn() {
+  const btn = document.getElementById("best-picks-btn");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    bestPicksMode = !bestPicksMode;
+
+    const recSlider = document.getElementById("filter-recommend");
+    const recVal    = document.getElementById("recommend-val");
+    const revSlider = document.getElementById("filter-reviews");
+    const revVal    = document.getElementById("reviews-val");
+    const sortEl    = document.getElementById("sort-by");
+
+    if (bestPicksMode) {
+      if (recSlider) recSlider.value = "93";
+      if (recVal)    recVal.textContent = "93%";
+      if (revSlider) revSlider.value = "20";
+      if (revVal)    revVal.textContent = "20";
+      if (sortEl)    sortEl.value = "cat_rank";
+      btn.classList.add("active");
+    } else {
+      if (recSlider) recSlider.value = "0";
+      if (recVal)    recVal.textContent = "Any";
+      if (revSlider) revSlider.value = "0";
+      if (revVal)    revVal.textContent = "Any";
+      btn.classList.remove("active");
+    }
+    currentPage = 1;
+    triggerSearch();
+  });
+
+  // Deactivate preset if user manually changes sliders away from preset values
+  document.getElementById("filter-recommend")?.addEventListener("input", function() {
+    if (bestPicksMode && parseInt(this.value) !== 93) {
+      bestPicksMode = false;
+      btn.classList.remove("active");
+    }
+  });
+  document.getElementById("filter-reviews")?.addEventListener("input", function() {
+    if (bestPicksMode && parseInt(this.value) !== 20) {
+      bestPicksMode = false;
+      btn.classList.remove("active");
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initBestPicksBtn);
+
+// ── Top-Picks Panel (🏆 toolbar button) ───────────────────────────────────────
+
+function initTopPicksPanel() {
+  const btn = document.getElementById("view-top-picks");
+  if (!btn) return;
+
+  btn.addEventListener("click", () => {
+    const panel     = document.getElementById("top-picks-panel");
+    const grid      = document.getElementById("product-grid");
+    const pgn       = document.getElementById("pagination");
+    const isOpen    = panel.style.display !== "none";
+
+    if (isOpen) {
+      panel.style.display = "none";
+      grid.style.display  = "";
+      pgn.style.display   = "";
+      btn.classList.remove("active");
+    } else {
+      // Close all other panels
+      ["cross-market-panel","movers-panel","brands-panel"].forEach(id => {
+        const p = document.getElementById(id);
+        if (p && p.style.display !== "none") {
+          p.style.display = "none";
+          const bid = {
+            "cross-market-panel": "view-cross-market",
+            "movers-panel":        "view-movers",
+            "brands-panel":        "view-brands",
+          }[id];
+          if (bid) document.getElementById(bid)?.classList.remove("active");
+        }
+      });
+      panel.style.display = "";
+      grid.style.display  = "none";
+      pgn.style.display   = "none";
+      const lmb = document.getElementById("load-more-btn");
+      if (lmb) lmb.style.display = "none";
+      btn.classList.add("active");
+      if (!_tpData) loadTopPicks();
+    }
+  });
+
+  // Threshold chips — refetch with new params
+  document.getElementById("tp-quality-chips")?.addEventListener("click", e => {
+    const chip = e.target.closest(".cm-qchip");
+    if (!chip) return;
+    document.querySelectorAll("#tp-quality-chips .cm-qchip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+    _tpThresh = parseInt(chip.dataset.thresh, 10);
+    _tpMinRev = parseInt(chip.dataset.reviews || "20", 10);
+    _tpData   = null;
+    loadTopPicks();
+  });
+
+  document.getElementById("tp-refresh-btn")?.addEventListener("click", () => {
+    _tpData = null;
+    loadTopPicks();
+  });
+}
+
+async function loadTopPicks() {
+  const gridEl = document.getElementById("top-picks-grid");
+  const status = document.getElementById("tp-status");
+  if (!gridEl) return;
+
+  gridEl.innerHTML = '<div style="padding:24px;color:var(--text2);text-align:center">Loading best products…</div>';
+  if (status) status.textContent = "";
+
+  try {
+    const res  = await fetch(`${API_BASE}/api/top-picks?min_recommend=${_tpThresh}&min_reviews=${_tpMinRev}&limit_per_cat=5`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _tpData = data;
+    if (status) status.textContent = `${data.total_products} products · ${data.categories.length} categories`;
+    renderTopPicks(data);
+  } catch (e) {
+    gridEl.innerHTML = `<div style="padding:20px;color:var(--red)">Error loading best products: ${escHtml(e.message)}</div>`;
+    if (status) status.textContent = "Failed";
+  }
+}
+
+function renderTopPicks(data) {
+  const gridEl = document.getElementById("top-picks-grid");
+  if (!gridEl || !data?.categories) return;
+
+  gridEl.innerHTML = data.categories.map(cat => {
+    const isOpen = _tpOpenCat === cat.name;
+
+    const rows = cat.products.map(p => {
+      const rec  = p.RecommendRate_pct;
+      const n    = p.ReviewsCount || 0;
+      let badge = "";
+      if (rec >= 97 && (n >= 20 || n === 0))
+        badge = `<span class="quality-badge badge-excellent" style="font-size:0.72em">🏆 Top Pick</span>`;
+      else if (rec >= 93 && (n >= 10 || n === 0))
+        badge = `<span class="quality-badge badge-excellent" style="font-size:0.72em">⭐ Excellent</span>`;
+
+      const flag   = FLAG[p.country] || p.country || "";
+      const srcLbl = SOURCE_LABELS[p.source] || p.source;
+
+      const imgHtml = (p.image_url && p.image_url !== "__none__")
+        ? `<img class="tp-product-img" src="${escHtml(p.image_url)}" alt="${escHtml(p.Name)}" loading="lazy" onerror="this.style.display='none'">`
+        : `<span class="tp-product-img tp-no-img">📦</span>`;
+
+      let priceStr = "";
+      if (p.Price_CZK && p.currency === "CZK")
+        priceStr = Math.round(p.Price_CZK).toLocaleString() + " Kč";
+      else if (p.Price_EUR)
+        priceStr = "€" + parseFloat(p.Price_EUR).toFixed(0);
+      else if (p.Price_CZK)
+        priceStr = Math.round(p.Price_CZK).toLocaleString() + " " + (p.currency || "");
+
+      const revStr = n >= 1000 ? (n/1000).toFixed(1).replace(".0","") + "k" : String(n);
+
+      const link = p.ProductURL
+        ? `<a class="tp-open-link" href="${escHtml(p.ProductURL)}" target="_blank" rel="noopener">→</a>`
+        : "";
+
+      return `<li class="tp-product-row">
+        ${imgHtml}
+        <span class="tp-product-main">
+          <span class="tp-product-name" title="${escHtml(p.Name)}">${escHtml(p.Name)}</span>
+          <span class="tp-product-meta">
+            ${badge}
+            <span class="tp-product-rate">${Math.round(rec)}%</span>
+            <span class="tp-product-reviews">${revStr} reviews</span>
+            ${priceStr ? `<span class="tp-product-price">${escHtml(priceStr)}</span>` : ""}
+            <span class="tp-product-src">${flag} ${escHtml(srcLbl)}</span>
+          </span>
+        </span>
+        ${link}
+      </li>`;
+    }).join("");
+
+    return `<div class="tp-category${isOpen ? " tp-open" : ""}" data-cat="${escHtml(cat.name)}">
+      <div class="tp-category-header">
+        <span class="tp-category-name">${escHtml(cat.name)}</span>
+        <span class="tp-category-count">${cat.products.length} picks</span>
+        <button class="tp-show-all-btn" data-cat="${escHtml(cat.name)}" title="Open in main grid with Best Picks filter">Show all in grid →</button>
+        <span class="tp-chevron">${isOpen ? "▲" : "▼"}</span>
+      </div>
+      <ul class="tp-product-list${isOpen ? "" : " tp-collapsed"}">${rows}</ul>
+    </div>`;
+  }).join("");
+
+  // Accordion: click header to expand/collapse
+  gridEl.querySelectorAll(".tp-category-header").forEach(header => {
+    header.addEventListener("click", e => {
+      if (e.target.classList.contains("tp-show-all-btn")) return;
+      const catName = header.closest(".tp-category").dataset.cat;
+      _tpOpenCat = (_tpOpenCat === catName) ? null : catName;
+      renderTopPicks(_tpData);
+    });
+  });
+
+  // "Show all in grid →": close panel, set category + Best Picks preset
+  gridEl.querySelectorAll(".tp-show-all-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      e.stopPropagation();
+      const catName = btn.dataset.cat;
+
+      // Close panel, restore grid
+      document.getElementById("top-picks-panel").style.display = "none";
+      document.getElementById("product-grid").style.display    = "";
+      document.getElementById("pagination").style.display      = "";
+      document.getElementById("view-top-picks")?.classList.remove("active");
+
+      // Set main-category filter
+      const mcSel = document.getElementById("filter-main-category");
+      if (mcSel) { mcSel.value = catName; populateSubcategories(catName); }
+
+      // Activate Best Picks preset
+      bestPicksMode = true;
+      document.getElementById("best-picks-btn")?.classList.add("active");
+      const recSlider = document.getElementById("filter-recommend");
+      const recVal    = document.getElementById("recommend-val");
+      if (recSlider) recSlider.value = "93";
+      if (recVal)    recVal.textContent = "93%";
+      const revSlider = document.getElementById("filter-reviews");
+      const revVal    = document.getElementById("reviews-val");
+      if (revSlider) revSlider.value = "20";
+      if (revVal)    revVal.textContent = "20";
+
+      currentPage = 1;
+      triggerSearch();
+    });
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initTopPicksPanel);
 
 // ── Dark / light mode toggle ──────────────────────────────────────────────────
 (function initTheme() {
