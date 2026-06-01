@@ -435,9 +435,47 @@
           <label>Password</label>
           <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••" required />
         </div>
+        <div style="text-align:right;margin-top:-4px;margin-bottom:8px">
+          <button type="button" id="forgot-pw-link" style="background:none;border:none;color:var(--accent);font-size:0.8em;cursor:pointer;padding:0;text-decoration:underline">
+            Forgot password?
+          </button>
+        </div>
         <div class="auth-error" id="login-error"></div>
         <button type="submit" class="auth-submit" id="login-submit">Log in</button>
       </form>
+
+      <!-- FORGOT PASSWORD FORM -->
+      <div id="forgot-pw-form" class="auth-form" style="display:none">
+        <h2 class="auth-title">Reset password</h2>
+        <p class="auth-subtitle">Enter your email and we'll send a 6-digit code to set a new password.</p>
+        <!-- Step 1: enter email -->
+        <div id="forgot-step-email">
+          <div class="auth-field">
+            <label>Email</label>
+            <input type="email" id="forgot-email" autocomplete="email" placeholder="you@example.com" />
+          </div>
+          <div class="auth-error" id="forgot-error"></div>
+          <button type="button" class="auth-submit" id="forgot-send-btn">Send reset code</button>
+        </div>
+        <!-- Step 2: enter code + new password -->
+        <div id="forgot-step-code" style="display:none">
+          <div class="auth-field">
+            <label>6-digit code <span class="auth-hint">(check your email)</span></label>
+            <input type="text" id="forgot-code" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
+          </div>
+          <div class="auth-field">
+            <label>New password <span class="auth-hint">(min 8 characters)</span></label>
+            <input type="password" id="forgot-new-pw" autocomplete="new-password" placeholder="••••••••" minlength="8" />
+          </div>
+          <div class="auth-error" id="forgot-code-error"></div>
+          <button type="button" class="auth-submit" id="forgot-reset-btn">Set new password</button>
+        </div>
+        <div style="text-align:center;margin-top:12px">
+          <button type="button" id="back-to-login" style="background:none;border:none;color:var(--accent);font-size:0.8em;cursor:pointer;padding:0;text-decoration:underline">
+            ← Back to login
+          </button>
+        </div>
+      </div>
 
       <!-- REGISTER FORM -->
       <form id="register-form" class="auth-form" style="display:none">
@@ -474,17 +512,48 @@
 
         <div class="auth-research-questions">
           <p class="auth-research-intro">Three quick research questions — helps us understand who is building this database:</p>
+
           <div class="auth-field">
             <label>1. What is your primary reason for researching product quality?</label>
-            <textarea id="reg-q1" rows="2" placeholder="e.g. I want to make more informed purchase decisions…" required></textarea>
+            <select id="reg-q1" required>
+              <option value="">— select —</option>
+              <option value="Informed purchase decisions">Making more informed purchase decisions</option>
+              <option value="Avoid planned obsolescence">I want to avoid planned obsolescence</option>
+              <option value="Academic or professional research">Academic / professional research</option>
+              <option value="Environmental & sustainability concerns">Environmental and sustainability concerns</option>
+              <option value="Help others find reliable products">Help others find reliable products</option>
+              <option value="Repairability interest">Interested in product repairability</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
+
           <div class="auth-field">
-            <label>2. Which product categories do you think are most affected by planned obsolescence?</label>
-            <textarea id="reg-q2" rows="2" placeholder="e.g. Smartphones, printers, household appliances…" required></textarea>
+            <label>2. Which product categories are most affected by planned obsolescence?</label>
+            <div class="auth-checkbox-group" id="reg-q2-group">
+              <label class="auth-checkbox-item"><input type="checkbox" value="Smartphones" /> 📱 Smartphones</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Printers" /> 🖨 Printers &amp; ink</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Household appliances" /> 🏠 Household appliances</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Laptops" /> 💻 Laptops</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Headphones" /> 🎧 Headphones &amp; earbuds</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Batteries" /> 🔋 Batteries &amp; chargers</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Smart home devices" /> 💡 Smart home devices</label>
+              <label class="auth-checkbox-item"><input type="checkbox" value="Cameras" /> 📷 Cameras</label>
+            </div>
           </div>
+
           <div class="auth-field">
             <label>3. How do you currently discover high-quality products?</label>
-            <textarea id="reg-q3" rows="2" placeholder="e.g. Word of mouth, online reviews, specialist forums…" required></textarea>
+            <select id="reg-q3" required>
+              <option value="">— select —</option>
+              <option value="Word of mouth">Word of mouth / recommendations</option>
+              <option value="Online reviews">Online consumer reviews</option>
+              <option value="Specialist forums">Specialist forums or communities</option>
+              <option value="Consumer test magazines">Consumer test magazines (Which?, Stiftung Warentest…)</option>
+              <option value="Price comparison sites">Price comparison sites</option>
+              <option value="Expert blogs or YouTube">Expert blogs or YouTube</option>
+              <option value="Trial and error">Trial and error</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
         </div>
 

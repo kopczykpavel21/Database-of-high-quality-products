@@ -2927,6 +2927,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset best picks mode
     bestPicksMode = false;
     document.getElementById("best-picks-btn")?.classList.remove("active");
+    // Reset super-category
+    activeSuperCat = null;
+    renderSuperSubPills(null);
     if (avoidInfo) avoidInfo.style.display = "none";
     document.getElementById("sort-by").value = "cat_rank";  // restore default
     // Restore recommend filter (hidden when amazon_us was selected)
@@ -3612,6 +3615,25 @@ const CAT_PILL_ICONS = {
   "Other": "🔮", "Miscellaneous": "🔮",
 };
 
+// Super-category grouping: maps display label → list of NormalizedMainGroup values
+const SUPER_CATS = [
+  {
+    key:    "Home",
+    label:  "🏠 Home",
+    groups: ["Home Appliances"],
+  },
+  {
+    key:    "Tech",
+    label:  "💻 Tech",
+    groups: ["Phones & Tablets", "Computers", "Audio", "TV & Video", "Wearables",
+             "Gaming", "Cameras", "Smart Home", "Accessories", "Toys & Games",
+             "Storage", "Networking"],
+  },
+];
+
+// Track which super-category is currently active
+let activeSuperCat = null;
+
 /** Filter by a specific normalized subcategory — finds its main category automatically. */
 function filterByCategory(normalizedCat) {
   if (!normalizedCat) return;
@@ -3646,68 +3668,118 @@ function renderCatPills() {
   const row = document.getElementById("cat-pills-row");
   if (!row || !categoriesTree.length) return;
   const activeCat = document.getElementById("filter-main-category")?.value || "";
-  // Show top 13 main categories (already sorted by count in categoriesTree)
-  const top = categoriesTree.filter(c => c.main).slice(0, 13);
-  row.innerHTML = top.map(c => {
-    const icon = CAT_PILL_ICONS[c.main] || "📦";
-    const totalCount = (c.subs || []).reduce((s, sub) => s + (sub.count || 0), 0);
-    const isActive = activeCat === c.main;
-    return `<button class="cat-pill${isActive ? " cat-pill-active" : ""}" data-cat="${escHtml(c.main)}" title="${escHtml(c.main)} (${totalCount.toLocaleString()} products)">${icon} ${escHtml(c.main)}</button>`;
+
+  // Detect which super-category contains the active main group
+  if (activeCat && !activeSuperCat) {
+    const sc = SUPER_CATS.find(s => s.groups.includes(activeCat));
+    if (sc) activeSuperCat = sc.key;
+  }
+
+  // Render 2 super-category pills
+  row.innerHTML = SUPER_CATS.map(sc => {
+    const isActive = activeSuperCat === sc.key;
+    // Total product count across all groups in this super-category
+    const count = SUPER_CATS
+      .find(s => s.key === sc.key).groups
+      .reduce((sum, grp) => {
+        const entry = categoriesTree.find(e => e.main === grp);
+        return sum + (entry ? (entry.subs||[]).reduce((s2, sub) => s2 + (sub.count||0), 0) : 0);
+      }, 0);
+    return `<button class="cat-pill super-cat-pill${isActive ? " cat-pill-active" : ""}"
+              data-supercat="${escHtml(sc.key)}"
+              title="${escHtml(sc.label)} (${count.toLocaleString()} products)">
+              ${escHtml(sc.label)}
+            </button>`;
   }).join("");
   row.style.display = "flex";
 
-  row.querySelectorAll(".cat-pill").forEach(btn => {
+  row.querySelectorAll(".super-cat-pill").forEach(btn => {
     btn.addEventListener("click", () => {
+      const key = btn.dataset.supercat;
+      const wasActive = activeSuperCat === key;
+      activeSuperCat = wasActive ? null : key;
+
+      // Clear main-category and sub-category filters (super-cat controls sub-pill visibility only)
       const mc = document.getElementById("filter-main-category");
-      if (!mc) return;
-      const wasActive = mc.value === btn.dataset.cat;
-      mc.value = wasActive ? "" : btn.dataset.cat;
-      populateSubcategories(mc.value);
+      const sc = document.getElementById("filter-category");
+      if (mc) mc.value = "";
+      if (sc) sc.value = "";
+      populateSubcategories("");
+
+      row.querySelectorAll(".super-cat-pill").forEach(b =>
+        b.classList.toggle("cat-pill-active", b === btn && !wasActive)
+      );
+
+      renderSuperSubPills(wasActive ? null : activeSuperCat);
       currentPage = 1;
       triggerSearch();
-      // Update pill active states immediately
-      row.querySelectorAll(".cat-pill").forEach(b => {
-        b.classList.toggle("cat-pill-active", b === btn && !wasActive);
-      });
-      // Show/hide sub-category pills
-      renderSubCatPills(wasActive ? "" : btn.dataset.cat);
     });
   });
 
-  // Show sub-category pills for any already-active main category
-  renderSubCatPills(activeCat);
+  // Show sub-category pills for any already-active super-category
+  renderSuperSubPills(activeSuperCat);
 }
 
-function renderSubCatPills(mainCat) {
+/**
+ * Render a flat sub-category pill row combining all subcategories from a super-category's
+ * main groups. Each pill sets NormalizedCategory (not NormalizedMainGroup) directly.
+ */
+function renderSuperSubPills(superCatKey) {
   const row = document.getElementById("sub-pills-row");
   if (!row) return;
-  if (!mainCat) { row.style.display = "none"; row.innerHTML = ""; return; }
+  if (!superCatKey) { row.style.display = "none"; row.innerHTML = ""; return; }
 
-  const entry = categoriesTree.find(e => e.main === mainCat);
-  if (!entry || !entry.subs || entry.subs.length < 2) { row.style.display = "none"; return; }
+  const sc = SUPER_CATS.find(s => s.key === superCatKey);
+  if (!sc) { row.style.display = "none"; return; }
 
+  // Gather all sub-categories from all main groups in this super-category
+  const allSubs = [];
+  for (const grpName of sc.groups) {
+    const entry = categoriesTree.find(e => e.main === grpName);
+    if (entry && entry.subs) {
+      for (const sub of entry.subs) {
+        if (sub.sub && sub.count > 0) allSubs.push(sub);
+      }
+    }
+  }
+  // Sort by count descending, limit to 20
+  allSubs.sort((a, b) => (b.count || 0) - (a.count || 0));
   const activeSub = document.getElementById("filter-category")?.value || "";
-  // Show up to 12 sub-categories
-  const subs = entry.subs.slice(0, 12);
-  row.innerHTML = subs.map(s => {
+
+  row.innerHTML = allSubs.slice(0, 20).map(s => {
     const isActive = activeSub === s.sub;
-    return `<button class="cat-pill sub-pill${isActive ? " cat-pill-active" : ""}" data-sub="${escHtml(s.sub)}" title="${escHtml(s.sub)} (${(s.count||0).toLocaleString()} products)">${escHtml(s.sub)}</button>`;
+    return `<button class="cat-pill sub-pill${isActive ? " cat-pill-active" : ""}"
+              data-sub="${escHtml(s.sub)}"
+              title="${escHtml(s.sub)} (${(s.count||0).toLocaleString()} products)">
+              ${escHtml(s.sub)}
+            </button>`;
   }).join("");
   row.style.display = "flex";
 
   row.querySelectorAll(".sub-pill").forEach(btn => {
     btn.addEventListener("click", () => {
-      const sc = document.getElementById("filter-category");
-      if (!sc) return;
-      const wasActive = sc.value === btn.dataset.sub;
-      sc.value = wasActive ? "" : btn.dataset.sub;
+      const sc2 = document.getElementById("filter-category");
+      if (!sc2) return;
+      const wasActive = sc2.value === btn.dataset.sub;
+      sc2.value = wasActive ? "" : btn.dataset.sub;
       currentPage = 1;
       triggerSearch();
-      row.querySelectorAll(".sub-pill").forEach(b => {
-        b.classList.toggle("cat-pill-active", b === btn && !wasActive);
-      });
+      row.querySelectorAll(".sub-pill").forEach(b =>
+        b.classList.toggle("cat-pill-active", b === btn && !wasActive)
+      );
     });
   });
+}
+
+function renderSubCatPills(mainCat) {
+  // Legacy wrapper: delegate to super-cat pill renderer if a super-cat is active,
+  // otherwise just hide the sub-pill row (the new super-cat pills handle navigation).
+  if (activeSuperCat) {
+    renderSuperSubPills(activeSuperCat);
+  } else {
+    const row = document.getElementById("sub-pills-row");
+    if (row) { row.style.display = "none"; row.innerHTML = ""; }
+  }
 }
 
 // ── Product history sparkline in modal ────────────────────────────────────────
@@ -4178,9 +4250,22 @@ function closeAuthModal() {
 }
 
 function showAuthView(view) {
-  document.getElementById("login-form").style.display    = view === "login"    ? "" : "none";
-  document.getElementById("register-form").style.display = view === "register" ? "" : "none";
-  document.getElementById("user-panel").style.display    = view === "user"     ? "" : "none";
+  document.getElementById("login-form").style.display       = view === "login"    ? "" : "none";
+  document.getElementById("register-form").style.display    = view === "register" ? "" : "none";
+  document.getElementById("user-panel").style.display       = view === "user"     ? "" : "none";
+  const forgotEl = document.getElementById("forgot-pw-form");
+  if (forgotEl) {
+    forgotEl.style.display = view === "forgot" ? "" : "none";
+    // Reset forgot-pw form to step 1 when hidden
+    if (view !== "forgot") {
+      document.getElementById("forgot-step-email").style.display = "";
+      document.getElementById("forgot-step-code").style.display  = "none";
+      const err1 = document.getElementById("forgot-error");
+      const err2 = document.getElementById("forgot-code-error");
+      if (err1) { err1.textContent = ""; err1.style.color = ""; }
+      if (err2) err2.textContent = "";
+    }
+  }
   document.getElementById("tab-login").classList.toggle("active",    view === "login");
   document.getElementById("tab-register").classList.toggle("active", view === "register");
 }
@@ -4262,6 +4347,77 @@ function initAuthModal() {
   tabLogin?.addEventListener("click",  () => showAuthView("login"));
   tabReg?.addEventListener("click",    () => showAuthView("register"));
 
+  // ── Forgot Password flow ───────────────────────────────────────────────────
+  document.getElementById("forgot-pw-link")?.addEventListener("click", () => {
+    showAuthView("forgot");
+  });
+  document.getElementById("back-to-login")?.addEventListener("click", () => {
+    showAuthView("login");
+  });
+
+  document.getElementById("forgot-send-btn")?.addEventListener("click", async () => {
+    const email  = document.getElementById("forgot-email").value.trim();
+    const errEl  = document.getElementById("forgot-error");
+    const btn    = document.getElementById("forgot-send-btn");
+    errEl.textContent = "";
+    if (!email) { errEl.textContent = "Please enter your email."; return; }
+    btn.disabled = true; btn.textContent = "Sending…";
+    try {
+      const r    = await fetch("/api/request-code", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        document.getElementById("forgot-step-email").style.display = "none";
+        document.getElementById("forgot-step-code").style.display  = "";
+        if (data.dev_code) {
+          // Dev mode — SMTP not configured, show code in UI
+          errEl.textContent = `Dev mode: code is ${data.dev_code}`;
+          errEl.style.color = "#d97706";
+        }
+      } else {
+        errEl.textContent = data.error || "Could not send code.";
+      }
+    } catch (_) {
+      errEl.textContent = "Network error.";
+    } finally {
+      btn.disabled = false; btn.textContent = "Send reset code";
+    }
+  });
+
+  document.getElementById("forgot-reset-btn")?.addEventListener("click", async () => {
+    const email   = document.getElementById("forgot-email").value.trim();
+    const code    = document.getElementById("forgot-code").value.trim();
+    const newPw   = document.getElementById("forgot-new-pw").value;
+    const errEl   = document.getElementById("forgot-code-error");
+    const btn     = document.getElementById("forgot-reset-btn");
+    errEl.textContent = "";
+    if (code.length !== 6) { errEl.textContent = "Enter the 6-digit code."; return; }
+    if (newPw.length < 8)  { errEl.textContent = "Password must be at least 8 characters."; return; }
+    btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const r    = await fetch("/api/reset-password", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code, new_password: newPw }),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        // Auto-login with new credentials
+        setAuthToken(data.token);
+        updateAuthButton(data.user);
+        showAuthView("user");
+        populateUserPanel(data.user);
+      } else {
+        errEl.textContent = data.error || "Reset failed. Check the code and try again.";
+      }
+    } catch (_) {
+      errEl.textContent = "Network error.";
+    } finally {
+      btn.disabled = false; btn.textContent = "Set new password";
+    }
+  });
+
   // Login submit
   loginForm?.addEventListener("submit", async e => {
     e.preventDefault();
@@ -4302,7 +4458,9 @@ function initAuthModal() {
     const password = document.getElementById("reg-password").value;
     const country  = document.getElementById("reg-country").value;
     const q1       = document.getElementById("reg-q1").value.trim();
-    const q2       = document.getElementById("reg-q2").value.trim();
+    // Q2 is a checkbox group — gather checked values
+    const q2Checks = [...document.querySelectorAll("#reg-q2-group input[type=checkbox]:checked")].map(c => c.value);
+    const q2       = q2Checks.length ? q2Checks.join(", ") : "—";
     const q3       = document.getElementById("reg-q3").value.trim();
     const errEl    = document.getElementById("reg-error");
     const btn      = document.getElementById("reg-submit");

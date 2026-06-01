@@ -2101,6 +2101,60 @@ def _populate_coolblue_images() -> int:
 
 
 
+def _populate_images_from_sibling_products() -> int:
+    """Propagate images from products that have one to those that don't,
+    matching on LOWER(brand) + NormalizedCategory.
+
+    This boosts coverage for sources that are bot-blocked (digitec, zbozi,
+    datart, ceneo etc.) by sharing a representative brand/category image
+    from a source that succeeded.  Not a perfect per-model match but far
+    better than no image at all.
+    Returns the number of rows updated.
+    """
+    conn = open_db()
+    # Only run if there are any NULL/empty image_url rows worth updating
+    to_update = conn.execute(
+        """SELECT COUNT(*) FROM products
+           WHERE (image_url IS NULL OR image_url = '' OR image_url = '__none__')
+             AND brand IS NOT NULL AND brand != ''
+             AND NormalizedCategory IS NOT NULL AND NormalizedCategory != ''"""
+    ).fetchone()[0]
+    if not to_update:
+        conn.close()
+        return 0
+
+    # SQLite correlated UPDATE: for each row without an image, find any row
+    # with the same brand (case-insensitive) + NormalizedCategory that has one.
+    conn.execute(
+        """UPDATE products
+           SET image_url = (
+               SELECT p2.image_url
+               FROM products p2
+               WHERE p2.image_url IS NOT NULL
+                 AND p2.image_url != ''
+                 AND p2.image_url != '__none__'
+                 AND LOWER(TRIM(COALESCE(p2.brand, ''))) = LOWER(TRIM(COALESCE(products.brand, '')))
+                 AND p2.NormalizedCategory = products.NormalizedCategory
+               ORDER BY p2.ReviewsCount DESC   -- prefer the most-reviewed variant
+               LIMIT 1
+           )
+           WHERE (image_url IS NULL OR image_url = '' OR image_url = '__none__')
+             AND brand IS NOT NULL AND brand != ''
+             AND NormalizedCategory IS NOT NULL AND NormalizedCategory != ''
+             AND EXISTS (
+                 SELECT 1 FROM products p3
+                 WHERE p3.image_url IS NOT NULL AND p3.image_url != '' AND p3.image_url != '__none__'
+                   AND LOWER(TRIM(COALESCE(p3.brand, ''))) = LOWER(TRIM(COALESCE(products.brand, '')))
+                   AND p3.NormalizedCategory = products.NormalizedCategory
+             )"""
+    )
+    n = conn.total_changes
+    conn.commit()
+    conn.close()
+    logging.info(f"[sibling-images] propagated {n} images from sibling products")
+    return n
+
+
 def _post_scrape_normalize() -> int:
     """Run category normalization after a nightly scrape completes.
 
@@ -3217,23 +3271,33 @@ def query_top_picks(min_recommend: float = 93.0,
             and (now - _top_picks_ts) < TOP_PICKS_TTL):
         return _top_picks_cache
 
+    # English-only main groups to include (excludes Czech-named and junk groups)
+    ALLOWED_GROUPS = (
+        "'Home Appliances'", "'Computers'", "'Audio'", "'Phones & Tablets'",
+        "'TV & Video'", "'Wearables'", "'Accessories'", "'Storage'",
+        "'Cameras'", "'Toys & Games'", "'Gaming'", "'Smart Home'", "'Networking'",
+        "'Garden & Outdoors'", "'Sport'",
+    )
+    allowed_sql = ", ".join(ALLOWED_GROUPS)
+
     conn = open_db()
     rows = conn.execute(
-        """SELECT id, Name, NormalizedMainGroup, NormalizedCategory,
+        f"""SELECT id, Name, NormalizedMainGroup, NormalizedCategory,
                   RecommendRate_pct, ReviewsCount,
                   Price_CZK, Price_EUR,
                   COALESCE(currency, 'CZK') AS currency,
                   COALESCE(country, 'CZ')  AS country,
                   source, ProductURL, image_url, brand,
-                  COALESCE(cat_rank, 99999) AS cat_rank
+                  cat_rank
            FROM products
            WHERE source NOT IN ('dtest', 'warentest')
              AND RecommendRate_pct >= ?
              AND ReviewsCount       >= ?
-             AND NormalizedMainGroup IS NOT NULL
-             AND NormalizedMainGroup != ''
+             AND NormalizedMainGroup IN ({allowed_sql})
            ORDER BY NormalizedMainGroup,
-                    COALESCE(cat_rank, 99999) ASC""",
+                    CASE WHEN cat_rank IS NOT NULL THEN cat_rank ELSE 99999 END ASC,
+                    RecommendRate_pct DESC,
+                    ReviewsCount DESC""",
         (min_recommend, min_reviews),
     ).fetchall()
     conn.close()
@@ -3793,6 +3857,18 @@ class Handler(BaseHTTPRequestHandler):
                 result = verify_code_and_login(
                     email = body.get("email", ""),
                     code  = body.get("code", ""),
+                )
+                self.send_json(result, status=200 if result["ok"] else 400)
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
+        elif path == "/api/reset-password":
+            try:
+                from scraper.auth import reset_password
+                result = reset_password(
+                    email        = body.get("email", ""),
+                    code         = body.get("code", ""),
+                    new_password = body.get("new_password", ""),
                 )
                 self.send_json(result, status=200 if result["ok"] else 400)
             except Exception as e:
@@ -5017,6 +5093,16 @@ if __name__ == "__main__":
                 print(f"[init] coolblue image populate failed: {_e}", flush=True)
 
         threading.Thread(target=_run_coolblue_images, daemon=True, name="coolblue-img").start()
+
+        # 7a5. Propagate images from sibling products (same brand + category)
+        def _run_sibling_images():
+            try:
+                n = _populate_images_from_sibling_products()
+                print(f"[init] sibling image propagation: {n} rows updated", flush=True)
+            except Exception as _e:
+                print(f"[init] sibling image propagation failed: {_e}", flush=True)
+
+        threading.Thread(target=_run_sibling_images, daemon=True, name="sibling-img").start()
 
         # 7b. Background og:image fetcher — fills image_url for heureka, prisjakt, etc.
         # Batch=5000 covers all remaining untried products (~8k total untried) in 2 deploys.
