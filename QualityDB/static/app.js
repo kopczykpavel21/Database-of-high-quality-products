@@ -4300,6 +4300,34 @@ function populateUserPanel(user) {
   const span  = document.getElementById("user-token-display");
   if (span) span.textContent = token.slice(0, 8) + "…";
 
+  // Wire force-merge button
+  const mergeBtn = document.getElementById("force-merge-btn");
+  const mergeRes = document.getElementById("force-merge-result");
+  if (mergeBtn) {
+    mergeBtn.onclick = async () => {
+      mergeBtn.disabled = true;
+      if (mergeRes) mergeRes.textContent = "Merging…";
+      try {
+        const r = await fetch(`${API_BASE}/api/admin/merge-my-staged`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getAuthToken()}`, "Content-Type": "application/json" },
+          body: "{}",
+        });
+        const d = await r.json();
+        if (d.ok) {
+          const msg = `✓ ${d.merged} new · ${d.already_exists} updated · ${d.skipped} skipped`;
+          if (mergeRes) mergeRes.textContent = msg;
+        } else {
+          if (mergeRes) mergeRes.textContent = `✗ ${d.error}`;
+        }
+      } catch (e) {
+        if (mergeRes) mergeRes.textContent = `✗ ${e.message}`;
+      } finally {
+        mergeBtn.disabled = false;
+      }
+    };
+  }
+
   // Generate bookmarklet and set as drag-button href
   const bkHref = buildBookmarkletHref(token, API_BASE || "https://database-of-high-quality-products.fly.dev");
   const bkBtn  = document.getElementById("bm-drag-btn");

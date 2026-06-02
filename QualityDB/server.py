@@ -3904,6 +3904,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
+        elif path == "/api/admin/merge-my-staged":
+            # Force-merge the logged-in user's staged contributions into products.db
+            # (bypasses the 3-contributor threshold — for testing / bootstrapping)
+            try:
+                from scraper.auth import get_user_by_token, force_merge_user_staged
+                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                user  = get_user_by_token(token)
+                if not user:
+                    self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
+                    return
+                result = force_merge_user_staged(user["id"], DB_PATH)
+                self.send_json({"ok": True, **result})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/reset-password":
             try:
                 from scraper.auth import reset_password

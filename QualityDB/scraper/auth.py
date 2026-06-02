@@ -704,3 +704,80 @@ def maybe_merge_staged(products_db_path: str) -> int:
     users_conn.close()
     prod_conn.close()
     return merged_count
+
+
+def force_merge_user_staged(user_id: int, products_db_path: str) -> dict:
+    """
+    Admin override: merge all staged products for a single user without
+    requiring MERGE_THRESHOLD distinct contributors.
+
+    Used for testing / bootstrapping by the account owner.
+    Returns {"merged": N, "skipped": M, "already_exists": K}.
+    """
+    users_conn = open_users_db()
+    rows = users_conn.execute(
+        "SELECT * FROM staging_products WHERE user_id = ? AND merged = 0",
+        (user_id,),
+    ).fetchall()
+    rows = [dict(r) for r in rows]
+
+    if not rows:
+        users_conn.close()
+        return {"merged": 0, "skipped": 0, "already_exists": 0}
+
+    prod_conn = sqlite3.connect(products_db_path, timeout=30)
+    merged = 0
+    skipped = 0
+    already = 0
+
+    for r in rows:
+        url  = r["product_url"]
+        name = r["name"]
+        if not url or not name:
+            skipped += 1
+            continue
+        try:
+            existing = prod_conn.execute(
+                "SELECT id FROM products WHERE ProductURL = ?", (url,)
+            ).fetchone()
+            if existing:
+                # Update stale fields only when we have better values
+                prod_conn.execute("""
+                    UPDATE products SET
+                        RecommendRate_pct = COALESCE(?, RecommendRate_pct),
+                        ReviewsCount      = COALESCE(?, ReviewsCount),
+                        AvgStarRating     = COALESCE(?, AvgStarRating),
+                        Price_CZK         = COALESCE(?, Price_CZK),
+                        Price_EUR         = COALESCE(?, Price_EUR)
+                    WHERE ProductURL = ?
+                """, (r["recommend_pct"], r["reviews_count"], r["avg_star_rating"],
+                      r["price_czk"], r["price_eur"], url))
+                already += 1
+            else:
+                prod_conn.execute("""
+                    INSERT OR IGNORE INTO products
+                        (Name, source, country, Category, MainCategory,
+                         ProductURL, RecommendRate_pct, ReviewsCount,
+                         AvgStarRating, Price_CZK, Price_EUR, currency)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                """, (name,
+                      r["source"], r["country"],
+                      r["category"], r["main_category"],
+                      url,
+                      r["recommend_pct"], r["reviews_count"],
+                      r["avg_star_rating"], r["price_czk"], r["price_eur"],
+                      r["currency"]))
+                merged += 1
+            prod_conn.commit()
+            users_conn.execute(
+                "UPDATE staging_products SET merged = 1 WHERE id = ?", (r["id"],)
+            )
+        except Exception as e:
+            import logging as _log
+            _log.warning(f"force_merge: failed for {url}: {e}")
+            skipped += 1
+
+    users_conn.commit()
+    users_conn.close()
+    prod_conn.close()
+    return {"merged": merged, "skipped": skipped, "already_exists": already}

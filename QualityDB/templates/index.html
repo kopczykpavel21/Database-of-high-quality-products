@@ -640,6 +640,16 @@
           </div>
         </details>
 
+        <!-- Admin: force-merge staged contributions (bypasses 3-user threshold) -->
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <button id="force-merge-btn" style="font-size:0.78em;background:none;border:1px solid var(--border);
+            border-radius:6px;padding:4px 10px;color:var(--text2);cursor:pointer;transition:all var(--transition)"
+            title="Push your staged contributions into the main database (admin only)">
+            ⚡ Merge my staged contributions
+          </button>
+          <span id="force-merge-result" style="font-size:0.78em;color:var(--text2);margin-left:8px"></span>
+        </div>
+
         <button class="auth-logout-btn" id="auth-logout">Log out</button>
       </div>
 
