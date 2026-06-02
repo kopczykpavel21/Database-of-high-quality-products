@@ -3295,7 +3295,6 @@ def query_top_picks(min_recommend: float = 93.0,
              AND ReviewsCount       >= ?
              AND NormalizedMainGroup IN ({allowed_sql})
            ORDER BY NormalizedMainGroup,
-                    CASE WHEN cat_rank IS NOT NULL THEN cat_rank ELSE 99999 END ASC,
                     RecommendRate_pct DESC,
                     ReviewsCount DESC""",
         (min_recommend, min_reviews),

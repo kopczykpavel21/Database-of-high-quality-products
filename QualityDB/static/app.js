@@ -3721,8 +3721,9 @@ function renderCatPills() {
 }
 
 /**
- * Render a flat sub-category pill row combining all subcategories from a super-category's
- * main groups. Each pill sets NormalizedCategory (not NormalizedMainGroup) directly.
+ * Render a flat sub-category pill row combining sub-categories from a super-category.
+ * Each pill stores data-sub (NormalizedCategory) AND data-main (NormalizedMainGroup)
+ * so clicking can set both filters correctly.
  */
 function renderSuperSubPills(superCatKey) {
   const row = document.getElementById("sub-pills-row");
@@ -3732,24 +3733,29 @@ function renderSuperSubPills(superCatKey) {
   const sc = SUPER_CATS.find(s => s.key === superCatKey);
   if (!sc) { row.style.display = "none"; return; }
 
-  // Gather all sub-categories from all main groups in this super-category
+  // Gather sub-categories with their parent main group (needed for populateSubcategories)
   const allSubs = [];
   for (const grpName of sc.groups) {
     const entry = categoriesTree.find(e => e.main === grpName);
     if (entry && entry.subs) {
       for (const sub of entry.subs) {
-        if (sub.sub && sub.count > 0) allSubs.push(sub);
+        if (sub.sub && sub.count > 0) {
+          allSubs.push({ sub: sub.sub, count: sub.count, mainGroup: grpName });
+        }
       }
     }
   }
-  // Sort by count descending, limit to 20
   allSubs.sort((a, b) => (b.count || 0) - (a.count || 0));
-  const activeSub = document.getElementById("filter-category")?.value || "";
+
+  const mcSel   = document.getElementById("filter-main-category");
+  const scSel   = document.getElementById("filter-category");
+  const activeSub = scSel?.value || "";
 
   row.innerHTML = allSubs.slice(0, 20).map(s => {
     const isActive = activeSub === s.sub;
     return `<button class="cat-pill sub-pill${isActive ? " cat-pill-active" : ""}"
               data-sub="${escHtml(s.sub)}"
+              data-main="${escHtml(s.mainGroup)}"
               title="${escHtml(s.sub)} (${(s.count||0).toLocaleString()} products)">
               ${escHtml(s.sub)}
             </button>`;
@@ -3758,10 +3764,23 @@ function renderSuperSubPills(superCatKey) {
 
   row.querySelectorAll(".sub-pill").forEach(btn => {
     btn.addEventListener("click", () => {
-      const sc2 = document.getElementById("filter-category");
-      if (!sc2) return;
-      const wasActive = sc2.value === btn.dataset.sub;
-      sc2.value = wasActive ? "" : btn.dataset.sub;
+      const mainGrp = btn.dataset.main;
+      const subVal  = btn.dataset.sub;
+      const curSub  = document.getElementById("filter-category")?.value || "";
+      const wasActive = curSub === subVal;
+
+      if (wasActive) {
+        // Deactivate — restore super-cat main group context (no sub filter)
+        if (mcSel) { mcSel.value = mainGrp; populateSubcategories(mainGrp); }
+        const scSel2 = document.getElementById("filter-category");
+        if (scSel2) scSel2.value = "";
+      } else {
+        // Set main group first so the <select> gets populated, then set sub value
+        if (mcSel) { mcSel.value = mainGrp; populateSubcategories(mainGrp); }
+        const scSel2 = document.getElementById("filter-category");
+        if (scSel2) scSel2.value = subVal;
+      }
+
       currentPage = 1;
       triggerSearch();
       row.querySelectorAll(".sub-pill").forEach(b =>
@@ -3772,8 +3791,8 @@ function renderSuperSubPills(superCatKey) {
 }
 
 function renderSubCatPills(mainCat) {
-  // Legacy wrapper: delegate to super-cat pill renderer if a super-cat is active,
-  // otherwise just hide the sub-pill row (the new super-cat pills handle navigation).
+  // When a super-cat is active delegate to the super-cat renderer;
+  // otherwise hide the sub-pill row (super-cat pill controls it).
   if (activeSuperCat) {
     renderSuperSubPills(activeSuperCat);
   } else {
