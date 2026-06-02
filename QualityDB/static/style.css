@@ -3206,6 +3206,26 @@ mark.hl {
 .auth-submit:hover { background: var(--accent-hover); }
 .auth-submit:disabled { opacity: .6; cursor: not-allowed; }
 
+/* ── Contribution source breakdown ────────────────────────────────────────── */
+.my-contrib-breakdown {
+  padding: 8px 0 4px;
+  font-size: 0.8em;
+}
+.mcb-title {
+  color: var(--text2);
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+.mcb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.mcb-src   { color: var(--text); font-weight: 500; min-width: 90px; }
+.mcb-count { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mcb-detail { color: var(--text3); font-size: 0.9em; }
+
 /* ── Bookmarklet section (post-login panel) ──────────────────────────────── */
 .bookmarklet-section {
   display: flex;

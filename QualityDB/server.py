@@ -3764,6 +3764,49 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"error": str(e)}, status=500)
 
+        elif path == "/api/my-contributions":
+            try:
+                from scraper.auth import get_user_by_token, open_users_db
+                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                user = get_user_by_token(token)
+                if not user:
+                    self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
+                    return
+                conn = open_users_db()
+                rows = conn.execute(
+                    """SELECT source, country, name, product_url,
+                              recommend_pct, reviews_count, avg_star_rating,
+                              price_czk, price_eur, currency, submitted_at, merged
+                       FROM staging_products
+                       WHERE user_id = ?
+                       ORDER BY submitted_at DESC
+                       LIMIT 200""",
+                    (user["id"],),
+                ).fetchall()
+                conn.close()
+                # Group by source for summary
+                by_source = {}
+                for r in rows:
+                    src = r["source"] or "unknown"
+                    if src not in by_source:
+                        by_source[src] = {"count": 0, "with_price": 0,
+                                          "with_rating": 0, "sample": []}
+                    by_source[src]["count"] += 1
+                    if r["price_czk"] or r["price_eur"]: by_source[src]["with_price"] += 1
+                    if r["recommend_pct"] or r["avg_star_rating"]: by_source[src]["with_rating"] += 1
+                    if len(by_source[src]["sample"]) < 3:
+                        by_source[src]["sample"].append({
+                            "name": r["name"],
+                            "url":  r["product_url"],
+                            "rec":  r["recommend_pct"],
+                            "stars": r["avg_star_rating"],
+                            "price_czk": r["price_czk"],
+                            "price_eur": r["price_eur"],
+                        })
+                self.send_json({"ok": True, "total": len(rows), "by_source": by_source})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/my-sources":
             try:
                 from scraper.auth import get_user_by_token, COUNTRY_SOURCES

@@ -4308,16 +4308,44 @@ function populateUserPanel(user) {
     bkBtn.onclick = null;   // allow the drag; prevent default only if clicked directly
   }
 
-  // Load global stats
-  fetch(`${API_BASE}/api/contrib-stats`)
-    .then(r => r.json())
-    .then(s => {
-      const staged = document.getElementById("contrib-total-staged");
-      const merged = document.getElementById("contrib-total-merged");
-      if (staged) staged.textContent = (s.total_staged  ?? 0).toLocaleString();
-      if (merged) merged.textContent = (s.total_merged  ?? 0).toLocaleString();
-    })
-    .catch(() => {});
+  // Load global stats + personal contribution breakdown
+  const bkToken2 = getAuthToken() || "";
+  Promise.all([
+    fetch(`${API_BASE}/api/contrib-stats`).then(r => r.json()).catch(() => ({})),
+    fetch(`${API_BASE}/api/my-contributions`, {
+      headers: { Authorization: `Bearer ${bkToken2}` }
+    }).then(r => r.json()).catch(() => ({})),
+  ]).then(([stats, myContribs]) => {
+    const staged = document.getElementById("contrib-total-staged");
+    const merged = document.getElementById("contrib-total-merged");
+    if (staged) staged.textContent = (stats.total_staged  ?? 0).toLocaleString();
+    if (merged) merged.textContent = (stats.total_merged  ?? 0).toLocaleString();
+
+    // Show per-source breakdown below the stats
+    if (myContribs.ok && myContribs.total > 0) {
+      const existing = document.getElementById("my-contrib-breakdown");
+      const container = existing || document.createElement("div");
+      container.id = "my-contrib-breakdown";
+      container.className = "my-contrib-breakdown";
+      const rows = Object.entries(myContribs.by_source)
+        .sort((a, b) => b[1].count - a[1].count)
+        .map(([src, info]) => {
+          const pct = info.count > 0
+            ? ` · ${Math.round(100*info.with_price/info.count)}% price · ${Math.round(100*info.with_rating/info.count)}% rating`
+            : "";
+          return `<div class="mcb-row">
+            <span class="mcb-src">${escHtml(src)}</span>
+            <span class="mcb-count">${info.count}</span>
+            <span class="mcb-detail">${escHtml(pct)}</span>
+          </div>`;
+        }).join("");
+      container.innerHTML = `<p class="mcb-title">Your contributions by source:</p>${rows}`;
+      if (!existing) {
+        const statsEl = document.querySelector(".user-stats");
+        if (statsEl && statsEl.parentNode) statsEl.parentNode.insertBefore(container, statsEl.nextSibling);
+      }
+    }
+  });
 }
 
 /**
@@ -4362,18 +4390,28 @@ var scrapers={
   return ps;
 },
 "zbozi.cz":function(){
+  // Zbozi uses a JSON API — call it same-origin (no CORS issues from browser on zbozi.cz)
+  // Extract category path from current URL, e.g. /elektronika/audio/sluchatka/ → that path
+  var catPath=location.pathname.replace(/^\/|\/$/g,"");
+  if(!catPath){alert("IKOR Skener: Otevřte stránku kategorie na Zbozi.cz (např. /elektronika/smartphony/)");return[];}
   var ps=[];
-  document.querySelectorAll(".c-product-list__item,[data-type='product'],.product-list-item,[class*='productItem']").forEach(function(el){
-    var nEl=el.querySelector(".c-product-item__title a,.product-title a,h2 a,h3 a,[class*='title'] a");
-    var pEl=el.querySelector(".c-price__price,[class*='price']");
-    var rEl=el.querySelector("[class*='rating'],[class*='review']");
-    var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
-    if(!n||!u)return;
-    var obj={Name:n,ProductURL:u,source:"zbozi",country:"CZ"};
-    if(pEl){var s=pEl.textContent.replace(/[^\d]/g,"");if(s)obj.Price_CZK=parseFloat(s);}
-    if(rEl){var r=rEl.textContent.match(/(\d[\d,.]+)/);if(r)obj.RecommendRate_pct=parseFloat(r[1]);}
-    ps.push(obj);
-  });
+  var xhr=new XMLHttpRequest();
+  xhr.open("GET","https://www.zbozi.cz/api/v3/zbozi/zi-search?categoryPath="+encodeURIComponent(catPath)+"&limit=48&offset=0",false);
+  try{xhr.send();}catch(e){return[];}
+  if(xhr.status!==200)return[];
+  try{
+    var d=JSON.parse(xhr.responseText);
+    (d.products||d.items||[]).forEach(function(p){
+      var n=p.displayName||p.name||p.title;
+      var u=p.url||(p.productUrl?("https://www.zbozi.cz"+p.productUrl):"");
+      if(!n||!u)return;
+      var obj={Name:n,ProductURL:u,source:"zbozi",country:"CZ"};
+      if(p.minPrice)obj.Price_CZK=p.minPrice/100;
+      if(p.rating)obj.RecommendRate_pct=p.rating;
+      if(p.experienceCount)obj.ReviewsCount=p.experienceCount;
+      ps.push(obj);
+    });
+  }catch(e){}
   return ps;
 },
 "coolblue.nl":function(){
@@ -4411,19 +4449,59 @@ var scrapers={
 },
 "idealo.de":function(){
   var ps=[];
-  document.querySelectorAll(".sr-resultItem,article[class*='productCard'],li[class*='listItem'],[data-testid*='product']").forEach(function(el){
-    var nEl=el.querySelector("a.sr-resultItemLink span[class*='title'],a.productOffers-listItemTitleLink,[class*='productTitle'],h2 a,[class*='title'] a");
-    var lEl=el.querySelector("a.sr-resultItemLink,a[href*='/preisvergleich/'],a[href*='.html']");
-    var pEl=el.querySelector("[class*='price'],[data-testid*='price']");
-    var rEl=el.querySelector("[aria-label*='Bewertung'],[aria-label*='Stern'],[class*='rating']");
-    var n=nEl&&nEl.textContent.trim();
-    var u=lEl&&lEl.href;
-    if(!n||!u||!u.includes("idealo"))return;
-    var obj={Name:n,ProductURL:u,source:"idealo_de",country:"DE"};
-    if(pEl){var s=pEl.textContent.replace(/[^\d,.]/g,"").replace(",",".");if(s)obj.Price_EUR=parseFloat(s);}
-    if(rEl){var r=((rEl.textContent||rEl.getAttribute("aria-label")||"")).match(/(\d[\d,.]+)/);if(r)obj.AvgStarRating=parseFloat(r[1].replace(",","."));}
-    ps.push(obj);
+  // Strategy 1: JSON-LD structured data (most stable — does not change with React refactors)
+  document.querySelectorAll('script[type="application/ld+json"]').forEach(function(s){
+    try{
+      var d=JSON.parse(s.textContent);
+      var candidates=Array.isArray(d)?d:[d];
+      candidates.forEach(function(item){
+        if(item["@graph"])candidates=candidates.concat(item["@graph"]);
+      });
+      candidates.forEach(function(item){
+        var t=item["@type"]||"";
+        // ItemList on listing pages
+        if(t==="ItemList"||t==="OfferCatalog"){
+          (item.itemListElement||[]).forEach(function(el){
+            var p=el.item||el;
+            var n=p.name,u=p.url||(p.offers&&p.offers.url);
+            if(!n||!u)return;
+            var obj={Name:n,ProductURL:u,source:"idealo_de",country:"DE"};
+            var off=(p.offers)||{};
+            var price=off.price||off.lowPrice;
+            if(price)obj.Price_EUR=parseFloat(price);
+            if(p.aggregateRating){
+              var ar=p.aggregateRating;
+              if(ar.ratingValue)obj.AvgStarRating=parseFloat(ar.ratingValue);
+              if(ar.reviewCount)obj.ReviewsCount=parseInt(ar.reviewCount);
+            }
+            ps.push(obj);
+          });
+        }
+        // Individual Product on listing page (some layouts embed each product separately)
+        if((t==="Product"||t==="Offer")&&item.name&&item.url){
+          var obj={Name:item.name,ProductURL:item.url,source:"idealo_de",country:"DE"};
+          var off2=item.offers||{};
+          var p2=off2.price||off2.lowPrice;
+          if(p2)obj.Price_EUR=parseFloat(p2);
+          ps.push(obj);
+        }
+      });
+    }catch(e){}
   });
+  // Strategy 2: DOM selectors — try multiple known idealo layouts
+  if(!ps.length){
+    // All anchor tags pointing to /preisvergleich/ — works regardless of container class
+    var seen={};
+    document.querySelectorAll("a[href*='/preisvergleich/']").forEach(function(a){
+      var u=a.href;
+      if(!u||seen[u]||!u.includes("idealo.de/preisvergleich"))return;
+      // Skip navigation / filter links (should have visible product name text)
+      var n=(a.querySelector("span,h2,h3,[class*='title']")||a).textContent.trim();
+      if(!n||n.length<4)return;
+      seen[u]=1;
+      ps.push({Name:n,ProductURL:u,source:"idealo_de",country:"DE"});
+    });
+  }
   return ps;
 },
 "fnac.com":function(){
