@@ -28,7 +28,10 @@ import time
 from email.mime.text import MIMEText
 from typing import Optional
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "users.db")
+DB_PATH = os.environ.get(
+    "USERS_DB_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(__file__)), "users.db"),
+)
 
 # ── Sources available per country ─────────────────────────────────────────────
 COUNTRY_SOURCES: dict[str, list[dict]] = {
