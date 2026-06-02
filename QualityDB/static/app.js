@@ -4365,26 +4365,53 @@ function buildBookmarkletHref(token, apiBase) {
 var scrapers={
 "heureka.cz":function(){
   var ps=[],tld=h.includes("heureka.sk")?"sk":"cz";
-  document.querySelectorAll(".c-product-item,.c-product-list__item,.product-item").forEach(function(el){
-    var nEl=el.querySelector(".c-product-item__title a,.product-title a,h2 a,h3 a");
+  // Server-side scraper uses .c-product cards; bookmarklet uses same selectors
+  document.querySelectorAll(".c-product,.c-product-item,.c-product-list__item").forEach(function(el){
+    // Name & URL — same as server scraper: .c-product__link
+    var nEl=el.querySelector(".c-product__link,.c-product-item__title a,.product-title a,h2 a,h3 a");
     var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
-    if(!n||!u)return;
-    ps.push({Name:n,ProductURL:u,source:tld==="sk"?"heureka_sk":"heureka",country:tld.toUpperCase()});
+    if(!n||!u||!u.includes("heureka."))return;
+    var obj={Name:n,ProductURL:u,source:tld==="sk"?"heureka_sk":"heureka",country:tld.toUpperCase()};
+    // Rating % — ".c-rating-widget__value" contains "92 %" or "100%"
+    var rEl=el.querySelector(".c-rating-widget__value,[class*='rating-widget__value'],[class*='ratingValue']");
+    if(rEl){var rm=rEl.textContent.match(/(\d[\d,.]+)/);if(rm)obj.RecommendRate_pct=parseFloat(rm[1]);}
+    // Review count — span containing "recenzí" or "hodnocení"
+    var allSpans=el.querySelectorAll("span");
+    for(var si=0;si<allSpans.length;si++){
+      var st=allSpans[si].textContent.toLowerCase();
+      if(st.includes("recenz")||st.includes("hodnocen")){
+        var cm=st.match(/(\d[\d\s]*)/);if(cm)obj.ReviewsCount=parseInt(cm[1].replace(/\s/g,""));break;
+      }
+    }
+    // Price — ".c-product__price--bold" or ".c-product__price"
+    var pEl=el.querySelector(".c-product__price--bold,.c-product__price,[class*='product__price']");
+    if(pEl){var pm=pEl.textContent.replace(/[^\d]/g,"");if(pm)obj.Price_CZK=parseFloat(pm);}
+    ps.push(obj);
   });
   return ps;
 },
 "heureka.sk":function(){return scrapers["heureka.cz"]();},
 "alza.cz":function(){
   var ps=[];
-  document.querySelectorAll(".browsingitem,.alzaProductList-item,[class*='productBox']").forEach(function(el){
-    var nEl=el.querySelector(".top .name,.nameWrap a,h2 a,h3 a,[class*='product-name'] a");
+  document.querySelectorAll(".browsingitem,.alzaProductList-item,[class*='productBox'],[class*='ProductItem']").forEach(function(el){
+    var nEl=el.querySelector(".top .name,.nameWrap a,h2 a,h3 a,[class*='product-name'] a,[class*='ProductName'] a");
     var lEl=el.querySelector("a[href]");
-    var pEl=el.querySelector(".price-box__price,.priceBox .price,[data-pd-price],[class*='price']");
+    var pEl=el.querySelector(".price-box__price,.priceBox .price,[data-pd-price],[class*='price__price']");
+    // Rating: Alza shows X/5 stars or recommend %
+    var rEl=el.querySelector("[class*='rating'],[class*='Rating'],[class*='stars'],[data-rating]");
+    // Review count
+    var cEl=el.querySelector("[class*='review'],[class*='Review'],[class*='hodnoceni'],[class*='opinion']");
     var n=nEl&&nEl.textContent.trim();
     var u=(lEl&&lEl.href)||"";
     if(!n||!u.includes("alza.cz"))return;
     var obj={Name:n,ProductURL:u,source:"alza",country:"CZ"};
-    if(pEl){var s=pEl.textContent.replace(/[^\d]/g,"");if(s)obj.Price_CZK=parseFloat(s);}
+    if(pEl){var s=pEl.textContent.replace(/[^\d]/g,"");if(s&&s.length<8)obj.Price_CZK=parseFloat(s);}
+    if(rEl){
+      var rd=rEl.getAttribute("data-rating")||rEl.textContent;
+      var rm=rd.match(/(\d[\d,.]+)/);
+      if(rm){var rv=parseFloat(rm[1]);if(rv<=5)obj.AvgStarRating=rv;else if(rv<=100)obj.RecommendRate_pct=rv;}
+    }
+    if(cEl){var cm=cEl.textContent.match(/(\d+)/);if(cm)obj.ReviewsCount=parseInt(cm[1]);}
     ps.push(obj);
   });
   return ps;
