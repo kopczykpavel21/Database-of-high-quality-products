@@ -5103,6 +5103,15 @@ if __name__ == "__main__":
         #    for all Alza products even though the data was never live-scraped.
         #    Delete those snapshots so badges only appear once the live scraper has run.
         def _cleanup_fake_alza_snapshots():
+            """Delete ALL alza.cz snapshots seeded from stale XLSX data.
+
+            The Alza data was bulk-imported from an XLSX file (not live-scraped),
+            so all existing alza.cz snapshots show fabricated 'Stable 14d' history.
+            Wipe them now — real snapshots will accumulate once alza_live_scraper.py
+            runs on Sunday and alza_snapshot.py records fresh values.
+
+            This runs every restart but is idempotent once snapshots are gone.
+            """
             try:
                 import os as _os
                 snaps_path = _os.environ.get(
@@ -5113,31 +5122,12 @@ if __name__ == "__main__":
                     return
                 import sqlite3 as _sq3
                 sc = _sq3.connect(snaps_path, timeout=30)
-                # Attach products.db and delete alza.cz snapshots for any product
-                # that has never been live-scraped (scraped_at IS NULL).
-                # Uses ATTACH + subquery to avoid the 999-variable SQLite limit.
-                prod_db_path = _os.environ.get(
-                    "DB_PATH",
-                    _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "products.db"))
-                )
-                sc.execute(f"ATTACH DATABASE ? AS pdb", (prod_db_path,))
-                result = sc.execute("""
-                    DELETE FROM product_snapshots
-                    WHERE source = 'alza.cz'
-                      AND product_url IN (
-                          SELECT ProductURL FROM pdb.products
-                          WHERE source = 'alza'
-                            AND (scraped_at IS NULL OR scraped_at = '')
-                      )
-                """)
+                result = sc.execute("DELETE FROM product_snapshots WHERE source = 'alza.cz'")
                 n = result.rowcount
-                sc.execute("DETACH DATABASE pdb")
                 sc.commit()
                 sc.close()
                 if n:
-                    print(f"[init] cleaned {n} fake Alza snapshot rows (stale XLSX data — will regenerate after live scraper runs)", flush=True)
-                else:
-                    print("[init] no fake Alza snapshots found (already clean)", flush=True)
+                    print(f"[init] removed {n} stale Alza snapshot rows — real history starts after live scraper runs", flush=True)
             except Exception as _ce:
                 print(f"[init] alza snapshot cleanup skipped: {_ce}", flush=True)
 
