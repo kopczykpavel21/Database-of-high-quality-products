@@ -5098,18 +5098,41 @@ if __name__ == "__main__":
         except Exception as _e:
             print(f"[init] Scheduler not started: {_e}", flush=True)
 
-        # 6. One-time alza.cz snapshot seed — creates today + seed snapshot so
-        #    alza products immediately show the 📈 badge (seed_days=7 inserts a
-        #    synthetic row dated 7 days ago; INSERT OR IGNORE is safe on reruns).
-        def _seed_alza_snapshots():
+        # 6. Clean up fake Alza snapshot seeds (created from stale XLSX data).
+        #    The seed_days=7 seeding created synthetic history that shows "Stable 14d, 97%"
+        #    for all Alza products even though the data was never live-scraped.
+        #    Delete those snapshots so badges only appear once the live scraper has run.
+        def _cleanup_fake_alza_snapshots():
             try:
-                from scraper.alza_snapshot import run_alza_snapshot
-                n = run_alza_snapshot(seed_days=7)
-                print(f"[init] alza snapshot seed: {n} rows", flush=True)
-            except Exception as _se:
-                print(f"[init] alza snapshot seed skipped: {_se}", flush=True)
+                import os as _os
+                snaps_path = _os.environ.get(
+                    "SNAPSHOTS_DB_PATH",
+                    _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
+                )
+                if not _os.path.exists(snaps_path):
+                    return
+                import sqlite3 as _sq3
+                sc = _sq3.connect(snaps_path, timeout=30)
+                # Delete alza.cz snapshots for products that have never been live-scraped
+                # (scraped_at IS NULL means data came from the original XLSX import)
+                prod_conn = open_db()
+                unscraped = {r[0] for r in prod_conn.execute(
+                    "SELECT ProductURL FROM products WHERE source='alza' AND scraped_at IS NULL"
+                ).fetchall()}
+                prod_conn.close()
+                if unscraped:
+                    placeholders = ",".join("?" * len(unscraped))
+                    n = sc.execute(
+                        f"DELETE FROM product_snapshots WHERE source='alza.cz' AND product_url IN ({placeholders})",
+                        list(unscraped),
+                    ).rowcount
+                    sc.commit()
+                    print(f"[init] cleaned {n} fake Alza snapshot rows (seeded from stale XLSX data)", flush=True)
+                sc.close()
+            except Exception as _ce:
+                print(f"[init] alza snapshot cleanup skipped: {_ce}", flush=True)
 
-        threading.Thread(target=_seed_alza_snapshots, daemon=True, name="alza-snap-seed").start()
+        threading.Thread(target=_cleanup_fake_alza_snapshots, daemon=True, name="alza-snap-cleanup").start()
 
         # 7a. Populate alza images instantly from SKU codes (no HTTP requests)
         def _run_alza_images():
