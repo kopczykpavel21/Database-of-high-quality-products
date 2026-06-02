@@ -3206,6 +3206,134 @@ mark.hl {
 .auth-submit:hover { background: var(--accent-hover); }
 .auth-submit:disabled { opacity: .6; cursor: not-allowed; }
 
+/* ── Bookmarklet section (post-login panel) ──────────────────────────────── */
+.bookmarklet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.bm-heading {
+  font-size: 1em;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.bm-sub {
+  font-size: 0.82em;
+  color: var(--text2);
+  margin: -8px 0 0;
+}
+.bm-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.bm-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75em;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.bm-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  font-size: 0.85em;
+  color: var(--text);
+}
+.bm-step-body strong { font-weight: 600; }
+.bm-hint {
+  font-size: 0.8em;
+  color: var(--text2);
+  margin: 0;
+  line-height: 1.45;
+}
+.bm-hint kbd {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: monospace;
+  font-size: 0.9em;
+}
+.bm-drag-btn {
+  display: inline-block;
+  padding: 8px 18px;
+  background: var(--green);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9em;
+  border-radius: 8px;
+  text-decoration: none;
+  cursor: grab;
+  user-select: none;
+  align-self: flex-start;
+  transition: opacity var(--transition);
+  margin: 2px 0;
+}
+.bm-drag-btn:hover { opacity: 0.88; }
+.bm-drag-btn:active { cursor: grabbing; }
+.bm-fallback {
+  font-size: 0.75em;
+  color: var(--text3);
+  margin: 0;
+}
+.bm-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.bm-links a {
+  font-size: 0.8em;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+.bm-links a:hover {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.bm-supported {
+  font-size: 0.75em;
+  color: var(--text3);
+  margin: 0;
+}
+.bm-advanced {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.bm-advanced summary {
+  font-size: 0.82em;
+  color: var(--text2);
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.bm-advanced summary::-webkit-details-marker { display: none; }
+.bm-advanced summary:hover { background: var(--surface2); }
+.bm-advanced .user-download-section {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+}
+
 /* ── Registration checkbox group (Q2) ────────────────────────────────────── */
 .auth-checkbox-group {
   display: grid;

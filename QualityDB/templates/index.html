@@ -584,14 +584,62 @@
             <span class="user-stat-label">merged to DB</span>
           </div>
         </div>
-        <div class="user-download-section">
-          <p>To contribute product data, run the scraper on your machine:</p>
-          <div class="user-token-box">
-            <code id="contrib-cmd">python3 contrib_scraper.py --token <span id="user-token-display">…</span></code>
-            <button class="copy-token-btn" id="copy-token-btn" title="Copy to clipboard">📋</button>
+        <!-- BOOKMARKLET SECTION -->
+        <div class="bookmarklet-section">
+          <h3 class="bm-heading">🔖 Přidejte skener do záložek</h3>
+          <p class="bm-sub">Přetáhněte zelené tlačítko do záložkové lišty v prohlížeči. Stačí jednou.</p>
+
+          <div class="bm-step">
+            <span class="bm-step-num">1</span>
+            <div class="bm-step-body">
+              <strong>Přetáhněte toto tlačítko do záložkové lišty:</strong>
+              <p class="bm-hint">💡 Nejprve zobrazte lištu záložek: <kbd>Ctrl+Shift+B</kbd> (Win) nebo <kbd>⌘+Shift+B</kbd> (Mac). Pod adresním řádkem se zobrazí lišta.</p>
+              <a id="bm-drag-btn" class="bm-drag-btn" href="#" onclick="return false;" title="Přetáhněte do záložkové lišty v prohlížeči">🔬 IKOR Skener</a>
+              <p class="bm-fallback">Nejde přetáhnout? Klikněte pravým tlačítkem na zelené tlačítko → „Přidat záložku".</p>
+            </div>
           </div>
-          <a href="/static/contrib_scraper.py" download class="download-btn">⬇ Download contrib_scraper.py</a>
+
+          <div class="bm-step">
+            <span class="bm-step-num">2</span>
+            <div class="bm-step-body">
+              <strong>🛍️ Jděte na e-shop a otevřete libovolnou kategorii:</strong>
+              <div class="bm-links">
+                <a href="https://www.heureka.cz" target="_blank" rel="noopener">🇨🇿 Heureka.cz →</a>
+                <a href="https://www.heureka.sk" target="_blank" rel="noopener">🇸🇰 Heureka.sk →</a>
+                <a href="https://www.alza.cz" target="_blank" rel="noopener">🇨🇿 Alza.cz →</a>
+                <a href="https://www.zbozi.cz" target="_blank" rel="noopener">🇨🇿 Zbozi.cz →</a>
+                <a href="https://www.coolblue.nl" target="_blank" rel="noopener">🇳🇱 Coolblue.nl →</a>
+                <a href="https://www.idealo.de" target="_blank" rel="noopener">🇩🇪 Idealo.de →</a>
+                <a href="https://www.fnac.com" target="_blank" rel="noopener">🇫🇷 Fnac.com →</a>
+              </div>
+              <p class="bm-hint">Musíte být na stránce s výpisem produktů (např. Smartphony, Notebooky, Pračky).</p>
+            </div>
+          </div>
+
+          <div class="bm-step">
+            <span class="bm-step-num">3</span>
+            <div class="bm-step-body">
+              <strong>✅ Klikněte na záložku <em>IKOR Skener</em></strong>
+              <p class="bm-hint">Zobrazí se okno: „Nalezeno X produktů — přispět?" Klikněte Přispět — hotovo! Trvá ~2 sekundy.</p>
+            </div>
+          </div>
+
+          <p class="bm-supported">Podporuje: <strong>Heureka.cz</strong> · <strong>Heureka.sk</strong> · <strong>Alza.cz</strong> · <strong>Zbozi.cz</strong> · <strong>Coolblue.nl</strong> · <strong>Idealo.de</strong> · <strong>Fnac.com</strong></p>
         </div>
+
+        <!-- ADVANCED: Python CLI (collapsed) -->
+        <details class="bm-advanced">
+          <summary>⚙ Pokročilé — Python skener</summary>
+          <div class="user-download-section">
+            <p style="font-size:0.82em;color:var(--text2);margin-bottom:8px">Spusťte lokálně pro hromadný sběr dat:</p>
+            <div class="user-token-box">
+              <code id="contrib-cmd">python3 contrib_scraper.py --token <span id="user-token-display">…</span></code>
+              <button class="copy-token-btn" id="copy-token-btn" title="Copy to clipboard">📋</button>
+            </div>
+            <a href="/static/contrib_scraper.py" download class="download-btn">⬇ Download contrib_scraper.py</a>
+          </div>
+        </details>
+
         <button class="auth-logout-btn" id="auth-logout">Log out</button>
       </div>
 

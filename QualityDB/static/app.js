@@ -4297,12 +4297,19 @@ function populateUserPanel(user) {
     (user.contrib_count ?? 0).toLocaleString();
 
   const token = getAuthToken() || "";
-  const cmd   = document.getElementById("contrib-cmd");
   const span  = document.getElementById("user-token-display");
   if (span) span.textContent = token.slice(0, 8) + "…";
 
+  // Generate bookmarklet and set as drag-button href
+  const bkHref = buildBookmarkletHref(token, API_BASE || "https://database-of-high-quality-products.fly.dev");
+  const bkBtn  = document.getElementById("bm-drag-btn");
+  if (bkBtn && bkHref) {
+    bkBtn.href = bkHref;
+    bkBtn.onclick = null;   // allow the drag; prevent default only if clicked directly
+  }
+
   // Load global stats
-  fetch("/api/contrib-stats")
+  fetch(`${API_BASE}/api/contrib-stats`)
     .then(r => r.json())
     .then(s => {
       const staged = document.getElementById("contrib-total-staged");
@@ -4311,6 +4318,156 @@ function populateUserPanel(user) {
       if (merged) merged.textContent = (s.total_merged  ?? 0).toLocaleString();
     })
     .catch(() => {});
+}
+
+/**
+ * Build a javascript: bookmarklet URI with the user's auth token and API base embedded.
+ * The bookmarklet scrapes product data from supported e-shops and POSTs to /api/contribute.
+ * Supported sites: Heureka.cz, Heureka.sk, Alza.cz, Zbozi.cz, Coolblue.nl, Idealo.de, Fnac.com
+ */
+function buildBookmarkletHref(token, apiBase) {
+  if (!token) return null;
+
+  // ── Site-specific scraper functions ─────────────────────────────────────────
+  // Each returns [{Name, ProductURL, source, country, ?Price_CZK, ?Price_EUR, ?AvgStarRating, ?RecommendRate_pct, ?ReviewsCount}]
+  // Written as template literals so token/apiBase are substituted at generation time.
+  // Functions use only var/function (ES5) for maximum browser compat in bookmarklets.
+
+  const scraperSrc = String.raw`
+var scrapers={
+"heureka.cz":function(){
+  var ps=[],tld=h.includes("heureka.sk")?"sk":"cz";
+  document.querySelectorAll(".c-product-item,.c-product-list__item,.product-item").forEach(function(el){
+    var nEl=el.querySelector(".c-product-item__title a,.product-title a,h2 a,h3 a");
+    var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
+    if(!n||!u)return;
+    ps.push({Name:n,ProductURL:u,source:tld==="sk"?"heureka_sk":"heureka",country:tld.toUpperCase()});
+  });
+  return ps;
+},
+"heureka.sk":function(){return scrapers["heureka.cz"]();},
+"alza.cz":function(){
+  var ps=[];
+  document.querySelectorAll(".browsingitem,.alzaProductList-item,[class*='productBox']").forEach(function(el){
+    var nEl=el.querySelector(".top .name,.nameWrap a,h2 a,h3 a,[class*='product-name'] a");
+    var lEl=el.querySelector("a[href]");
+    var pEl=el.querySelector(".price-box__price,.priceBox .price,[data-pd-price],[class*='price']");
+    var n=nEl&&nEl.textContent.trim();
+    var u=(lEl&&lEl.href)||"";
+    if(!n||!u.includes("alza.cz"))return;
+    var obj={Name:n,ProductURL:u,source:"alza",country:"CZ"};
+    if(pEl){var s=pEl.textContent.replace(/[^\d]/g,"");if(s)obj.Price_CZK=parseFloat(s);}
+    ps.push(obj);
+  });
+  return ps;
+},
+"zbozi.cz":function(){
+  var ps=[];
+  document.querySelectorAll(".c-product-list__item,[data-type='product'],.product-list-item,[class*='productItem']").forEach(function(el){
+    var nEl=el.querySelector(".c-product-item__title a,.product-title a,h2 a,h3 a,[class*='title'] a");
+    var pEl=el.querySelector(".c-price__price,[class*='price']");
+    var rEl=el.querySelector("[class*='rating'],[class*='review']");
+    var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
+    if(!n||!u)return;
+    var obj={Name:n,ProductURL:u,source:"zbozi",country:"CZ"};
+    if(pEl){var s=pEl.textContent.replace(/[^\d]/g,"");if(s)obj.Price_CZK=parseFloat(s);}
+    if(rEl){var r=rEl.textContent.match(/(\d[\d,.]+)/);if(r)obj.RecommendRate_pct=parseFloat(r[1]);}
+    ps.push(obj);
+  });
+  return ps;
+},
+"coolblue.nl":function(){
+  var ps=[];
+  document.querySelectorAll('script[type="application/ld+json"]').forEach(function(s){
+    try{
+      var d=JSON.parse(s.textContent);
+      var items=d["@type"]==="ItemList"?d.itemListElement:
+        (d["@graph"]||[]).filter(function(x){return x["@type"]==="ItemList";})
+                         .reduce(function(a,x){return a.concat(x.itemListElement||[]);;},[]);
+      (items||[]).forEach(function(it){
+        var item=it.item||it;
+        var n=item.name,u=item.url;
+        if(!n||!u)return;
+        var obj={Name:n,ProductURL:u,source:"coolblue",country:"NL"};
+        var offers=item.offers||{};
+        var price=offers.price||offers.lowPrice;
+        if(price)obj.Price_EUR=parseFloat(price);
+        ps.push(obj);
+      });
+    }catch(e){}
+  });
+  if(!ps.length){
+    document.querySelectorAll(".product-card,[class*='ProductCard'],.js-product-card").forEach(function(el){
+      var nEl=el.querySelector("[class*='title'] a,h2 a,h3 a");
+      var pEl=el.querySelector(".sales-price,[class*='price']");
+      var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
+      if(!n||!u)return;
+      var obj={Name:n,ProductURL:u,source:"coolblue",country:"NL"};
+      if(pEl){var s=pEl.textContent.replace(/[^\d,.]/g,"").replace(",",".");if(s)obj.Price_EUR=parseFloat(s);}
+      ps.push(obj);
+    });
+  }
+  return ps;
+},
+"idealo.de":function(){
+  var ps=[];
+  document.querySelectorAll(".sr-resultItem,article[class*='productCard'],li[class*='listItem'],[data-testid*='product']").forEach(function(el){
+    var nEl=el.querySelector("a.sr-resultItemLink span[class*='title'],a.productOffers-listItemTitleLink,[class*='productTitle'],h2 a,[class*='title'] a");
+    var lEl=el.querySelector("a.sr-resultItemLink,a[href*='/preisvergleich/'],a[href*='.html']");
+    var pEl=el.querySelector("[class*='price'],[data-testid*='price']");
+    var rEl=el.querySelector("[aria-label*='Bewertung'],[aria-label*='Stern'],[class*='rating']");
+    var n=nEl&&nEl.textContent.trim();
+    var u=lEl&&lEl.href;
+    if(!n||!u||!u.includes("idealo"))return;
+    var obj={Name:n,ProductURL:u,source:"idealo_de",country:"DE"};
+    if(pEl){var s=pEl.textContent.replace(/[^\d,.]/g,"").replace(",",".");if(s)obj.Price_EUR=parseFloat(s);}
+    if(rEl){var r=((rEl.textContent||rEl.getAttribute("aria-label")||"")).match(/(\d[\d,.]+)/);if(r)obj.AvgStarRating=parseFloat(r[1].replace(",","."));}
+    ps.push(obj);
+  });
+  return ps;
+},
+"fnac.com":function(){
+  var ps=[];
+  var items=document.querySelectorAll("article.Article-itemGroup,.Article-itemWrapper");
+  if(!items.length)items=document.querySelectorAll("article.thumbnail,.thumbnail-article");
+  items.forEach(function(el){
+    var nEl=el.querySelector("a.Article-title,a.thumbnail-titleLink,[class*='title'] a,h2 a,h3 a");
+    var pEl=el.querySelector(".userPrice,.thumbnail-price,.Article-price,.f-priceBox-price");
+    var rEl=el.querySelector(".f-star-score,[class*='starScore'],[class*='ratingScore']");
+    var cEl=el.querySelector(".customerReviewsRating__countTotal,[class*='reviewCount'],[class*='countTotal']");
+    var n=nEl&&nEl.textContent.trim(),u=nEl&&nEl.href;
+    if(!n||!u||!u.includes("fnac.com"))return;
+    try{var pu=new URL(u);["from","Origin","position","sl","shId"].forEach(function(k){pu.searchParams.delete(k);});u=pu.toString();}catch(e){}
+    var obj={Name:n,ProductURL:u,source:"fnac",country:"FR"};
+    if(pEl){var s=pEl.textContent.replace(/[^\d,.]/g,"").replace(",",".");if(s)obj.Price_EUR=parseFloat(s);}
+    if(rEl){var r=rEl.textContent.match(/(\d[\d,.]+)/);if(r)obj.AvgStarRating=parseFloat(r[1].replace(",","."));}
+    if(cEl){var c=cEl.textContent.match(/(\d+)/);if(c)obj.ReviewsCount=parseInt(c[1]);}
+    ps.push(obj);
+  });
+  return ps;
+}
+};`;
+
+  // ── Bookmarklet wrapper ──────────────────────────────────────────────────────
+  const script = `(function(){
+var T=${JSON.stringify(token)},A=${JSON.stringify(apiBase)},h=location.hostname;
+${scraperSrc.trim()}
+var fn=null;
+Object.keys(scrapers).forEach(function(k){if(h===k||h.endsWith("."+k)||h.includes(k))fn=scrapers[k];});
+if(!fn){alert("IKOR Skener: Tato str\\u00e1nka nen\\u00ed podporov\\u00e1na.\\nPodporuje: Heureka.cz/sk \\u00b7 Alza.cz \\u00b7 Zbozi.cz \\u00b7 Coolblue.nl \\u00b7 Idealo.de \\u00b7 Fnac.com");return;}
+var ps=fn();
+if(!ps.length){alert("IKOR Skener: Nenalezeny produkty.\\nOtev\\u0159te str\\u00e1nku s v\\u00fdpisem produkt\\u016f.");return;}
+if(!confirm("IKOR Skener: Nalezeno "+ps.length+" produkt\\u016f \\u2014 p\\u0159isp\\u011bt?"))return;
+fetch(A+"/api/contribute",{method:"POST",
+  headers:{"Authorization":"Bearer "+T,"Content-Type":"application/json"},
+  body:JSON.stringify({products:ps})
+}).then(function(r){return r.json();}).then(function(d){
+  if(d.queued!==undefined)alert("IKOR Skener: P\\u0159id\\u00e1no "+d.queued+" produkt\\u016f. D\\u011bkujeme!");
+  else alert("IKOR Skener: Chyba: "+JSON.stringify(d));
+}).catch(function(e){alert("IKOR Skener: Chyba p\\u0159ipojen\\u00ed: "+e.message);});
+})();`;
+
+  return "javascript:" + encodeURIComponent(script);
 }
 
 async function tryRestoreSession() {
