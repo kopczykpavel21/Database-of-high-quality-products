@@ -4187,6 +4187,24 @@ if __name__ == "__main__":
             print(f"[init] No DB at {DB_PATH} — waiting for upload.", flush=True)
             return  # nothing more to do; server still accepts HTTP requests
 
+        # 1a. Synchronous pre-cleanup: remove stale Alza snapshots BEFORE any cache
+        #     is pre-warmed so the snapshot coverage reflects reality immediately.
+        try:
+            import os as _os2
+            _snaps = _os2.environ.get(
+                "SNAPSHOTS_DB_PATH",
+                _os2.path.abspath(_os2.path.join(_os2.path.dirname(__file__), "snapshots.db"))
+            )
+            if _os2.path.exists(_snaps):
+                import sqlite3 as _sq3b
+                _sc = _sq3b.connect(_snaps, timeout=30)
+                _n = _sc.execute("DELETE FROM product_snapshots WHERE source = 'alza.cz'").rowcount
+                _sc.commit(); _sc.close()
+                if _n:
+                    print(f"[init] pre-cleanup: removed {_n} stale Alza snapshots", flush=True)
+        except Exception as _pce:
+            print(f"[init] pre-cleanup skipped: {_pce}", flush=True)
+
         # 2. Schema migration + indexes (handles old DBs missing columns)
         try:
             _conn = open_db()
