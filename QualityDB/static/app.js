@@ -1723,7 +1723,7 @@ function renderCard(p) {
     const tip   = bName
       ? `${bName} averages ${score.toFixed(1)}/100 in independent expert tests (${cat})`
       : `Brand avg expert score: ${score.toFixed(1)}/100 (${cat})`;
-    return `<span class="expert-badge ${cls}" title="${tip}">🔬 ${score.toFixed(1)}</span>`;
+    return `<span class="expert-badge ${cls}" title="${tip}">🔬 brand avg ${score.toFixed(1)}</span>`;
   })();
 
   // 🆕 "new" badge — shown on products first seen within the last 14 days.
@@ -2259,7 +2259,7 @@ function openModal(productOrJson, cardId) {
       const cat   = escHtml(p.NormalizedCategory || '');
       return `
       <div class="modal-expert-block">
-        <div class="modal-expert-label">🔬 Independent Expert Test Score</div>
+        <div class="modal-expert-label">🔬 Independent Expert Test Score — <em>brand average</em></div>
         <div class="modal-expert-row">
           <div class="modal-expert-score ${cls}">${score.toFixed(1)}<span class="modal-expert-max"> / 100</span></div>
           <div class="modal-expert-meta">
