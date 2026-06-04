@@ -3940,6 +3940,34 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)})
 
+        elif path == "/api/admin/run-alza":
+            # Trigger Alza live scraper in background (priority products only by default)
+            try:
+                priority = body.get("priority", True)
+                max_prod = body.get("max_products", None)
+                def _run():
+                    try:
+                        from scraper.alza_live_scraper import run_alza_live_scraper
+                        n = run_alza_live_scraper(
+                            db_path=DB_PATH,
+                            priority_only=priority,
+                            max_products=max_prod,
+                        )
+                        print(f"[alza-on-demand] Done: {n} products updated", flush=True)
+                        # Invalidate stats cache so changes are visible immediately
+                        global _stats_cache, _stats_ts
+                        _stats_cache = None; _stats_ts = 0.0
+                    except Exception as _e:
+                        print(f"[alza-on-demand] Error: {_e}", flush=True)
+                import threading as _thr
+                _thr.Thread(target=_run, daemon=True, name="alza-on-demand").start()
+                mode = "priority (ReviewsCount ≥ 10)" if priority else "all"
+                limit_msg = f", limit {max_prod}" if max_prod else ""
+                self.send_json({"ok": True,
+                                "message": f"Alza live scraper started in background ({mode}{limit_msg}). ~22 min for priority set."})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/admin/restart-scheduler":
             try:
                 was_running = _scheduler_proc is not None and _scheduler_proc.poll() is None
