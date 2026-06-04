@@ -3370,7 +3370,7 @@ function loadHealth() {
         ${nStale  ? `<span class="health-summary-pill health-pill-stale">✕ ${nStale} stale</span>` : ""}
         ${nImport ? `<span class="health-summary-pill health-pill-imported">↑ ${nImport} imported</span>` : ""}
         <span class="health-summary-pill" style="background:#f5f5f5;color:#888">
-          ${data.scheduler_running ? "🟢 Scheduler running" : "🔴 Scheduler stopped"}
+          ${data.scheduler_running ? "🟢 Scheduler running" : `🔴 Scheduler stopped <button id="restart-scheduler-btn" style="margin-left:8px;padding:2px 10px;font-size:11px;font-weight:700;border:1.5px solid var(--red);border-radius:20px;background:none;color:var(--red);cursor:pointer;" onclick="(async()=>{this.disabled=true;this.textContent='Restarting…';const r=await fetch('${API_BASE}/api/admin/restart-scheduler',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const d=await r.json();this.textContent=d.ok?'↺ Restarted (PID '+d.pid+')':'Failed';})()">↺ Restart</button>`}
         </span>`;
 
       rowsEl.innerHTML = sources.map(s => {

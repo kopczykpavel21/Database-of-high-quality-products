@@ -145,12 +145,28 @@ def _start_scheduler():
     global _scheduler_proc
     if _scheduler_proc and _scheduler_proc.poll() is None:
         return  # already running
+    log_dir = os.path.join(os.path.dirname(__file__), "scraper", "logs")
+    os.makedirs(log_dir, exist_ok=True)
     _scheduler_proc = subprocess.Popen(
         [sys.executable, _SCHEDULER_PY],
-        stdout=open(os.path.join(os.path.dirname(__file__), "scraper", "logs", "scheduler.log"), "a"),
+        stdout=open(os.path.join(log_dir, "scheduler.log"), "a"),
         stderr=subprocess.STDOUT,
+        env={**os.environ},   # explicitly pass env so DB_PATH=/data/products.db reaches scheduler
     )
     print(f"[scheduler] Started as PID {_scheduler_proc.pid} — daily wake-up at 03:00.")
+
+
+def _scheduler_watchdog():
+    """Background thread: restart the scheduler if it dies unexpectedly."""
+    import time as _time
+    while True:
+        _time.sleep(300)   # check every 5 minutes
+        if _scheduler_proc is None or _scheduler_proc.poll() is not None:
+            print("[scheduler-watchdog] Scheduler not running — restarting…", flush=True)
+            try:
+                _start_scheduler()
+            except Exception as _we:
+                print(f"[scheduler-watchdog] Restart failed: {_we}", flush=True)
 
 
 def _query_scrape_status(limit: int = 20) -> dict:
@@ -3911,6 +3927,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
+        elif path == "/api/admin/restart-scheduler":
+            try:
+                was_running = _scheduler_proc is not None and _scheduler_proc.poll() is None
+                if was_running:
+                    _scheduler_proc.terminate()
+                _start_scheduler()
+                self.send_json({"ok": True, "pid": _scheduler_proc.pid,
+                                "was_running": was_running})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/admin/merge-my-staged":
             # Force-merge the logged-in user's staged contributions into products.db
             # (bypasses the 3-contributor threshold — for testing / bootstrapping)
@@ -5111,7 +5138,7 @@ if __name__ == "__main__":
         except Exception as _e:
             print(f"[init] Auth tables skipped: {_e}", flush=True)
 
-        # 5. Master scheduler subprocess
+        # 5. Master scheduler subprocess + watchdog
         try:
             os.makedirs(
                 os.path.join(os.path.dirname(__file__), "scraper", "logs"),
@@ -5120,6 +5147,9 @@ if __name__ == "__main__":
             _start_scheduler()
             _pid = _scheduler_proc.pid if _scheduler_proc else "N/A"
             print(f"[init] Scheduler PID {_pid} — daily wake-up at 03:00", flush=True)
+            # Watchdog: restarts scheduler if it dies (OOM, crash, etc.)
+            threading.Thread(target=_scheduler_watchdog, daemon=True, name="scheduler-watchdog").start()
+            print("[init] Scheduler watchdog started (checks every 5 min)", flush=True)
         except Exception as _e:
             print(f"[init] Scheduler not started: {_e}", flush=True)
 
