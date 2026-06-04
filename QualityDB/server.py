@@ -1188,6 +1188,10 @@ def query_products(params):
         "pricerunner": "DK", "pricerunner.dk": "DK",
     }
     country = SOURCE_COUNTRY.get(source, None) if source else None
+    # Also accept an explicit country code from the country-filter row (?ctry=CZ)
+    explicit_ctry = params.get("ctry", [""])[0].upper()
+    if not country and explicit_ctry:
+        country = explicit_ctry
 
     order_sql = "ASC" if order == "asc" else "DESC"
 
@@ -3388,10 +3392,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 country = params.get("country", [""])[0]
                 source  = params.get("source",  [""])[0] or None
+                # Also accept explicit country from the country-filter row (?ctry=CZ)
+                if not country:
+                    country = params.get("ctry", [""])[0].upper()
                 if country == "FR_IR":
                     self.send_json(get_fr_gov_categories(), max_age=300)
                     return
-                if country not in ("CZ", "DE", "PL", "SK", "US", "FR"):
+                if country not in ("CZ", "DE", "PL", "SK", "US", "FR", "AT", "CH", "NL", "SE", "DK"):
                     country = None   # None = all countries
                 self.send_json(get_categories_hierarchical(country, source), max_age=60)
             except Exception as e:

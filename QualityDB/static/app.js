@@ -14,7 +14,8 @@ let activeKeyword = "";
 let activeBrand   = "";  // exact brand filter set from brands leaderboard
 let avoidMode = false;
 let photosMode = false;
-let bestPicksMode = false;   // true when the 🏆 Best Picks preset is active
+let bestPicksMode  = false;   // true when the 🏆 Best Picks preset is active
+let activeCountry  = "";      // "" = all markets, "CZ"/"DE"/etc. = country filter
 // Cross-market quality filter state
 let _cmQualityThresh = 0;   // 0 = All, 90/93/97 = threshold
 let _cmRawData = null;      // cached raw cross-market API response for client-side re-filter
@@ -943,6 +944,7 @@ function getFilters() {
     sort: sortField,
     order: sortDir,
     source: document.getElementById("filter-source").value,
+    ctry: activeCountry,
     keyword: activeKeyword,
     brand: activeBrand,
     avoid: avoidMode ? "1" : "",
@@ -1038,6 +1040,7 @@ function pushFilterState() {
   const sp = new URLSearchParams();
   // Only include non-default values to keep the URL clean
   if (f.q)            sp.set("q", f.q);
+  if (activeCountry)  sp.set("ctry", activeCountry);
   if (f.main_category) sp.set("mc", f.main_category);
   if (f.category)     sp.set("cat", f.category);
   if (f.source)       sp.set("src", f.source);
@@ -1107,6 +1110,14 @@ function applyUrlFilters() {
     const dir = sp.get("order") || "desc";
     const val = sp.get("sort") + (dir === "desc" ? "_desc" : "");
     if (sortEl) sortEl.value = val;
+  }
+  // Restore country filter from URL
+  if (sp.get("ctry")) {
+    activeCountry = sp.get("ctry");
+    document.querySelector(`#country-filter-row .country-pill[data-ctry="${activeCountry}"]`)
+      ?.classList.add("country-pill-active");
+    document.querySelector('#country-filter-row .country-pill[data-ctry=""]')
+      ?.classList.remove("country-pill-active");
   }
   // Detect Best Picks preset from URL
   if (sp.get("rec") === "93" && sp.get("rev") === "20") {
@@ -1186,6 +1197,7 @@ async function fetchCategories() {
   const qp = new URLSearchParams();
   if (country) qp.set("country", country);
   if (src)     qp.set("source",  src);
+  if (activeCountry && !country) qp.set("ctry", activeCountry);
   const qs = qp.toString();
   const res = await fetch(`${API_BASE}/api/categories${qs ? "?" + qs : ""}`);
   categoriesTree = await res.json();
@@ -1973,6 +1985,9 @@ function renderActiveFilters() {
   const chips = [];
 
   if (bestPicksMode)      chips.push({ label: "🏆 Best Picks",        key: "bestpicks" });
+  const _CTRY_FLAGS = {CZ:"🇨🇿",SK:"🇸🇰",DE:"🇩🇪",AT:"🇦🇹",CH:"🇨🇭",FR:"🇫🇷",PL:"🇵🇱",NL:"🇳🇱",SE:"🇸🇪",DK:"🇩🇰",US:"🇺🇸"};
+  const _CTRY_NAMES = {CZ:"Czechia",SK:"Slovakia",DE:"Germany",AT:"Austria",CH:"Switzerland",FR:"France",PL:"Poland",NL:"Netherlands",SE:"Sweden",DK:"Denmark",US:"USA"};
+  if (activeCountry) chips.push({ label: `${_CTRY_FLAGS[activeCountry]||""} ${_CTRY_NAMES[activeCountry]||activeCountry}`, key: "ctry" });
   if (f.q)                chips.push({ label: `"${f.q}"`,            key: "q" });
   if (f.main_category)    chips.push({ label: f.main_category.replace(/^[^\w]/,"").trim(), key: "mc" });
   if (f.category)         chips.push({ label: f.category,            key: "cat" });
@@ -2006,6 +2021,12 @@ function renderActiveFilters() {
   bar.querySelectorAll(".af-chip").forEach(chip => {
     chip.addEventListener("click", () => {
       const key = chip.dataset.key;
+      if (key === "ctry") {
+        activeCountry = "";
+        document.querySelectorAll(".country-pill").forEach(b =>
+          b.classList.toggle("country-pill-active", b.dataset.ctry === "")
+        );
+      }
       if (key === "bestpicks") {
         bestPicksMode = false;
         document.getElementById("best-picks-btn")?.classList.remove("active");
@@ -2927,6 +2948,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset best picks mode
     bestPicksMode = false;
     document.getElementById("best-picks-btn")?.classList.remove("active");
+    // Reset country filter
+    activeCountry = "";
+    document.querySelectorAll(".country-pill").forEach(b =>
+      b.classList.toggle("country-pill-active", b.dataset.ctry === "")
+    );
     // Reset super-category
     activeSuperCat = null;
     renderSuperSubPills(null);
@@ -4817,6 +4843,40 @@ function initAuthModal() {
 }
 
 document.addEventListener("DOMContentLoaded", initAuthModal);
+
+// ── Country filter row ────────────────────────────────────────────────────────
+
+function initCountryFilter() {
+  const row = document.getElementById("country-filter-row");
+  if (!row) return;
+
+  row.addEventListener("click", e => {
+    const btn = e.target.closest(".country-pill");
+    if (!btn) return;
+
+    const ctry     = btn.dataset.ctry;
+    const wasActive = activeCountry === ctry;
+    activeCountry  = wasActive ? "" : ctry;
+
+    // If switching to a specific country, clear any source filter that doesn't belong
+    const srcEl = document.getElementById("filter-source");
+    if (srcEl && activeCountry) {
+      const matchingOpt = srcEl.querySelector(`option[data-market="${activeCountry}"]`);
+      if (!matchingOpt) srcEl.value = "";  // current source is from a different country
+    }
+
+    // Update pill active states
+    row.querySelectorAll(".country-pill").forEach(b =>
+      b.classList.toggle("country-pill-active", b.dataset.ctry === activeCountry)
+    );
+
+    currentPage = 1;
+    fetchCategories();   // refresh category tree for the chosen country
+    triggerSearch();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initCountryFilter);
 
 // ── Best Picks preset button ───────────────────────────────────────────────────
 
