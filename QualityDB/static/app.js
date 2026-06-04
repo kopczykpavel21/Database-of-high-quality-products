@@ -5118,6 +5118,195 @@ function renderTopPicks(data) {
 
 document.addEventListener("DOMContentLoaded", initTopPicksPanel);
 
+// ── Mobile bottom navigation bar ─────────────────────────────────────────────
+
+function initMobileBottomNav() {
+  if (window.innerWidth > 900) return;   // desktop — do nothing
+
+  // ── Search button ─────────────────────────────────────────────────────────
+  document.getElementById("mbn-search")?.addEventListener("click", () => {
+    const inp = document.getElementById("search-input");
+    if (inp) { inp.focus(); inp.select(); }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  // ── Market button — scroll to country row (shown full on tablet) or mini pills ──
+  document.getElementById("mbn-country")?.addEventListener("click", () => {
+    const row = document.getElementById("country-filter-row");
+    if (row && row.style.display !== "none") {
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      // Mini pills (mobile ≤600px) — scroll search section into view
+      document.querySelector(".search-section")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
+
+  // ── Best Picks button — delegates to the toolbar preset button ────────────
+  document.getElementById("mbn-picks")?.addEventListener("click", () => {
+    document.getElementById("best-picks-btn")?.click();
+  });
+
+  // ── View toggle — cycles grid ↔ list ─────────────────────────────────────
+  document.getElementById("mbn-view")?.addEventListener("click", () => {
+    const isGrid = !isListView;   // isListView is the module-level flag
+    if (isGrid) {
+      document.getElementById("view-list")?.click();
+    } else {
+      document.getElementById("view-grid")?.click();
+    }
+  });
+
+  // ── Filters button — opens sidebar ───────────────────────────────────────
+  document.getElementById("mbn-filters")?.addEventListener("click", openSidebar);
+
+  // ── Sync active states with app state ────────────────────────────────────
+  function syncBottomNav() {
+    const picksBtn = document.getElementById("mbn-picks");
+    if (picksBtn) picksBtn.classList.toggle("mbn-active", !!bestPicksMode);
+
+    const viewBtn  = document.getElementById("mbn-view");
+    const viewLabel = document.getElementById("mbn-view-label");
+    if (viewBtn)   viewBtn.classList.toggle("mbn-active", isListView);
+    if (viewLabel) viewLabel.textContent = isListView ? "List" : "Grid";
+    if (viewBtn)   viewBtn.querySelector("span:first-child").textContent = isListView ? "☰" : "⊞";
+
+    const ctryBtn   = document.getElementById("mbn-country");
+    const ctryLabel = document.getElementById("mbn-country-label");
+    if (ctryBtn)   ctryBtn.classList.toggle("mbn-active", !!activeCountry);
+    if (ctryLabel) ctryLabel.textContent = activeCountry
+      ? ({CZ:"🇨🇿",SK:"🇸🇰",DE:"🇩🇪",AT:"🇦🇹",CH:"🇨🇭",FR:"🇫🇷",PL:"🇵🇱",NL:"🇳🇱",SE:"🇸🇪",DK:"🇩🇰",US:"🇺🇸"}[activeCountry] || activeCountry)
+      : "Market";
+
+    const filtersBtn = document.getElementById("mbn-filters");
+    if (filtersBtn) filtersBtn.classList.toggle("mbn-active",
+      document.getElementById("sidebar")?.classList.contains("open") || false
+    );
+  }
+  // Sync once now and after every search/toggle
+  syncBottomNav();
+  // Re-sync when any filter changes
+  const origFetch = fetchProducts;
+  window._mbnSyncHook = syncBottomNav;
+}
+
+document.addEventListener("DOMContentLoaded", initMobileBottomNav);
+
+// Call bottom nav sync after key state changes (Best Picks, view toggle, country)
+(function patchForMbnSync() {
+  const orig = triggerSearch;
+  // We can't reassign a function declaration easily — use a post-render approach
+  // instead: observe the active-filters-bar for DOM changes, sync on each render
+  const observer = new MutationObserver(() => {
+    if (window._mbnSyncHook) window._mbnSyncHook();
+  });
+  document.addEventListener("DOMContentLoaded", () => {
+    const bar = document.getElementById("active-filters-bar");
+    if (bar) observer.observe(bar, { childList: true, subtree: false, attributes: true });
+    // Also sync on sidebar open/close
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) observer.observe(sidebar, { attributes: true, attributeFilter: ["class"] });
+  });
+})();
+
+// ── Mini country pills inside search section (mobile ≤600px) ─────────────────
+
+function initMiniCountryPills() {
+  if (window.innerWidth > 600) return;
+  const searchSection = document.querySelector(".search-section");
+  if (!searchSection || document.getElementById("search-country-mini")) return;
+
+  const wrap = document.createElement("div");
+  wrap.className = "search-country-mini";
+  wrap.id = "search-country-mini";
+
+  const countries = [
+    {ctry:"",   label:"🌍"},
+    {ctry:"CZ", label:"🇨🇿 CZ"},
+    {ctry:"SK", label:"🇸🇰 SK"},
+    {ctry:"DE", label:"🇩🇪 DE"},
+    {ctry:"AT", label:"🇦🇹 AT"},
+    {ctry:"CH", label:"🇨🇭 CH"},
+    {ctry:"FR", label:"🇫🇷 FR"},
+    {ctry:"PL", label:"🇵🇱 PL"},
+    {ctry:"NL", label:"🇳🇱 NL"},
+    {ctry:"SE", label:"🇸🇪 SE"},
+    {ctry:"DK", label:"🇩🇰 DK"},
+    {ctry:"US", label:"🇺🇸 US"},
+  ];
+  wrap.innerHTML = countries.map(c =>
+    `<button class="country-pill${activeCountry === c.ctry ? " country-pill-active" : ""}"
+       data-ctry="${escHtml(c.ctry)}">${escHtml(c.label)}</button>`
+  ).join("");
+
+  searchSection.appendChild(wrap);
+
+  // Clicks delegate to the same activeCountry logic
+  wrap.addEventListener("click", e => {
+    const btn = e.target.closest(".country-pill");
+    if (!btn) return;
+    const mainRow = document.getElementById("country-filter-row");
+    if (mainRow) {
+      // Simulate a click on the matching pill in the (hidden) main row
+      const mainPill = mainRow.querySelector(`.country-pill[data-ctry="${btn.dataset.ctry}"]`);
+      if (mainPill) { mainPill.click(); return; }
+    }
+    // Fallback: set directly
+    const ctry = btn.dataset.ctry;
+    const wasActive = activeCountry === ctry;
+    activeCountry = wasActive ? "" : ctry;
+    wrap.querySelectorAll(".country-pill").forEach(b =>
+      b.classList.toggle("country-pill-active", b.dataset.ctry === activeCountry)
+    );
+    currentPage = 1; fetchCategories(); triggerSearch();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", initMiniCountryPills);
+
+// ── Swipe down to close product detail modal ──────────────────────────────────
+
+function initModalSwipe() {
+  if (window.innerWidth > 600) return;   // desktop/tablet — skip
+  const overlay = document.getElementById("modal-overlay");
+  const modal   = document.getElementById("modal");
+  if (!overlay || !modal) return;
+
+  let startY = 0, isDragging = false;
+
+  modal.addEventListener("touchstart", e => {
+    startY     = e.touches[0].clientY;
+    isDragging = true;
+    modal.style.transition = "none";
+  }, { passive: true });
+
+  modal.addEventListener("touchmove", e => {
+    if (!isDragging) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) modal.style.transform = `translateY(${Math.round(dy)}px)`;
+  }, { passive: true });
+
+  modal.addEventListener("touchend", e => {
+    if (!isDragging) return;
+    isDragging = false;
+    modal.style.transition = "";
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy > 80) {
+      // Dismiss — use existing close logic
+      overlay.classList.remove("open");
+      currentModalCardId = null;
+      const hist = document.getElementById("modal-history");
+      if (hist) hist.style.display = "none";
+      const u = new URL(location.href);
+      u.searchParams.delete("p");
+      history.replaceState(null, "", u.toString() || u.pathname);
+    }
+    modal.style.transform = "";
+  }, { passive: true });
+}
+
+document.addEventListener("DOMContentLoaded", initModalSwipe);
+
 // ── Dark / light mode toggle ──────────────────────────────────────────────────
 (function initTheme() {
   // Restore saved preference (or respect OS setting — CSS handles that automatically)
