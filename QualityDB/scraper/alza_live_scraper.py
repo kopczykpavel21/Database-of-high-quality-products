@@ -184,6 +184,7 @@ def run_alza_live_scraper(
     db_path: str | None = None,
     priority_only: bool = False,
     max_products: int | None = None,
+    categories: list | None = None,
 ) -> int:
     """
     Refresh Alza product data in products.db.
@@ -192,6 +193,7 @@ def run_alza_live_scraper(
         db_path:       Path to products.db. Defaults to $DB_PATH or /data/products.db.
         priority_only: If True, only update products with ReviewsCount >= 10.
         max_products:  Cap on number of products to update in this run.
+        categories:    List of NormalizedCategory values to restrict to (optional).
 
     Returns:
         Number of products successfully updated.
@@ -215,19 +217,25 @@ def run_alza_live_scraper(
 
     # Select products to refresh.
     # Skip products freshly updated in the last 6 days so reruns don't repeat work.
+    # source can be 'alza' (old import) or 'alza.cz' (live DB) — match both.
     where_clauses = [
-        "source = 'alza'",
+        "source IN ('alza', 'alza.cz')",
         "ProductURL IS NOT NULL AND ProductURL != ''",
         "(scraped_at IS NULL OR scraped_at < datetime('now', '-6 days'))",
     ]
     if priority_only:
         where_clauses.append("ReviewsCount >= 10")
+    if categories:
+        placeholders = ",".join("?" * len(categories))
+        where_clauses.append(f"NormalizedCategory IN ({placeholders})")
 
     limit_sql = f" LIMIT {max_products}" if max_products else ""
+    params = categories if categories else []
     rows = conn.execute(
         f"SELECT rowid, ProductURL FROM products WHERE {' AND '.join(where_clauses)}"
         f" ORDER BY CASE WHEN ReviewsCount IS NULL THEN 1 ELSE 0 END, ReviewsCount DESC"
-        f"{limit_sql}"
+        f"{limit_sql}",
+        params,
     ).fetchall()
     conn.close()
 

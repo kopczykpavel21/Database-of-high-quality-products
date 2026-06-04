@@ -3941,10 +3941,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"ok": False, "error": str(e)})
 
         elif path == "/api/admin/run-alza":
-            # Trigger Alza live scraper in background (priority products only by default)
+            # Trigger Alza live scraper in background
             try:
-                priority = body.get("priority", True)
-                max_prod = body.get("max_products", None)
+                priority   = body.get("priority", True)
+                max_prod   = body.get("max_products", None)
+                categories = body.get("categories", None)   # optional list of NormalizedCategory
                 def _run():
                     try:
                         from scraper.alza_live_scraper import run_alza_live_scraper
@@ -3952,19 +3953,20 @@ class Handler(BaseHTTPRequestHandler):
                             db_path=DB_PATH,
                             priority_only=priority,
                             max_products=max_prod,
+                            categories=categories,
                         )
                         print(f"[alza-on-demand] Done: {n} products updated", flush=True)
-                        # Invalidate stats cache so changes are visible immediately
                         global _stats_cache, _stats_ts
                         _stats_cache = None; _stats_ts = 0.0
                     except Exception as _e:
                         print(f"[alza-on-demand] Error: {_e}", flush=True)
                 import threading as _thr
                 _thr.Thread(target=_run, daemon=True, name="alza-on-demand").start()
-                mode = "priority (ReviewsCount ≥ 10)" if priority else "all"
+                mode = "priority (≥10 reviews)" if priority else "all"
+                cat_msg  = f", categories: {categories}" if categories else ""
                 limit_msg = f", limit {max_prod}" if max_prod else ""
                 self.send_json({"ok": True,
-                                "message": f"Alza live scraper started in background ({mode}{limit_msg}). ~22 min for priority set."})
+                                "message": f"Alza live scraper started ({mode}{cat_msg}{limit_msg})"})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
