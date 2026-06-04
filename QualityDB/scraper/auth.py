@@ -770,7 +770,11 @@ def force_merge_user_staged(user_id: int, products_db_path: str) -> dict:
                       r["recommend_pct"], r["reviews_count"],
                       r["avg_star_rating"], r["price_czk"], r["price_eur"],
                       r["currency"]))
-                merged += 1
+                # Only count if the INSERT actually happened (not silently ignored)
+                if prod_conn.execute("SELECT changes()").fetchone()[0]:
+                    merged += 1
+                else:
+                    already += 1  # URL variant already in DB (trailing slash, case, etc.)
             prod_conn.commit()
             users_conn.execute(
                 "UPDATE staging_products SET merged = 1 WHERE id = ?", (r["id"],)
