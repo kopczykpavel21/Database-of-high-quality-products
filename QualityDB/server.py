@@ -3927,6 +3927,19 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
+        elif path == "/api/admin/scheduler-log":
+            # Return last 100 lines of scheduler.log for debugging
+            try:
+                log_path = os.path.join(os.path.dirname(__file__), "scraper", "logs", "scheduler.log")
+                if os.path.exists(log_path):
+                    with open(log_path, "r", errors="replace") as _lf:
+                        lines = _lf.readlines()
+                    self.send_json({"ok": True, "lines": lines[-100:], "path": log_path})
+                else:
+                    self.send_json({"ok": False, "error": f"Log not found at {log_path}"})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)})
+
         elif path == "/api/admin/restart-scheduler":
             try:
                 was_running = _scheduler_proc is not None and _scheduler_proc.poll() is None
