@@ -3940,6 +3940,42 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)})
 
+        elif path == "/api/admin/test-alza":
+            # Diagnostic: synchronously fetch ONE Alza URL and report what came back
+            try:
+                test_url = body.get("url") or ""
+                if not test_url:
+                    # Pick the most-reviewed Alza product from the DB
+                    _c = open_db()
+                    _r = _c.execute(
+                        "SELECT ProductURL FROM products WHERE source IN ('alza','alza.cz') "
+                        "AND ProductURL LIKE 'http%' ORDER BY ReviewsCount DESC LIMIT 1"
+                    ).fetchone()
+                    _c.close()
+                    test_url = _r[0] if _r else ""
+                if not test_url:
+                    self.send_json({"ok": False, "error": "No Alza URL found"}); return
+
+                result = {"url": test_url}
+                try:
+                    from curl_cffi import requests as _cffi
+                    _resp = _cffi.get(test_url, impersonate="chrome120", timeout=15,
+                                      headers={"Accept-Language": "cs-CZ,cs;q=0.9",
+                                               "Referer": "https://www.alza.cz/"})
+                    result["status_code"] = _resp.status_code
+                    result["html_len"]    = len(_resp.text or "")
+                    result["html_head"]   = (_resp.text or "")[:300]
+                    from scraper.alza_live_scraper import _extract_from_jsonld, _extract_from_inline_js
+                    jld = _extract_from_jsonld(_resp.text or "")
+                    inl = _extract_from_inline_js(_resp.text or "")
+                    result["jsonld_extracted"]   = jld
+                    result["inline_js_extracted"] = inl
+                except Exception as _te:
+                    result["fetch_error"] = str(_te)
+                self.send_json({"ok": True, **result})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/admin/run-alza":
             # Trigger Alza live scraper in background
             try:
