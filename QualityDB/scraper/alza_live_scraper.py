@@ -257,17 +257,30 @@ def run_alza_live_scraper(
         c.commit()
         c.close()
 
+    consecutive_fail = 0   # early-abort guard for datacenter IP blocking
+
     for i, row in enumerate(rows):
         url = row["ProductURL"]
         data = _scrape_product_page(url, session)
 
         if data is None:
             skipped += 1
+            consecutive_fail += 1
+            # Alza blocks datacenter IPs (HTTP 403). If the first 12 requests all
+            # fail, we're blocked — abort instead of wasting ~70 min on 12k 403s.
+            if consecutive_fail >= 12 and updated == 0:
+                log.warning(
+                    f"[alza-live] Aborting after {consecutive_fail} consecutive failures "
+                    f"with 0 successes — Alza is blocking this IP (403). "
+                    f"Use the IKOR Skener bookmarklet (runs in user browsers) instead."
+                )
+                break
         elif data.get("_deleted"):
-            # Optionally mark deleted products — for now just log
+            consecutive_fail = 0
             log.debug(f"[alza-live] 404: {url}")
             deleted += 1
         else:
+            consecutive_fail = 0
             # Build UPDATE
             fields = []
             vals   = []
