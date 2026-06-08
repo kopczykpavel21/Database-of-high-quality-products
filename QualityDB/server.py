@@ -3940,6 +3940,66 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)})
 
+        elif path == "/api/admin/alza-urls":
+            # Return alza.cz ProductURLs for the local scraper to refresh.
+            # Optional body: {"category": "...", "limit": N, "min_reviews": N}
+            try:
+                cat = body.get("category")
+                lim = int(body.get("limit", 500))
+                minrev = int(body.get("min_reviews", 0))
+                wc = ["source IN ('alza','alza.cz')", "ProductURL LIKE 'http%'"]
+                params = []
+                if cat:
+                    wc.append("NormalizedCategory = ?"); params.append(cat)
+                if minrev:
+                    wc.append("ReviewsCount >= ?"); params.append(minrev)
+                _c = open_db()
+                rows = _c.execute(
+                    f"SELECT ProductURL FROM products WHERE {' AND '.join(wc)} "
+                    f"ORDER BY CASE WHEN ReviewsCount IS NULL THEN 1 ELSE 0 END, ReviewsCount DESC "
+                    f"LIMIT ?", params + [lim]
+                ).fetchall()
+                _c.close()
+                self.send_json({"ok": True, "urls": [r[0] for r in rows]})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
+        elif path == "/api/admin/bulk-update-products":
+            # Apply a batch of scraped updates (from the local Alza runner) by ProductURL.
+            # Body: {"updates": [{"ProductURL":..., "Price_CZK":..., "RecommendRate_pct":...,
+            #                     "ReviewsCount":..., "AvgStarRating":...}, ...]}
+            try:
+                updates = body.get("updates", [])
+                _c = open_db()
+                applied = 0; notfound = 0; empty = 0
+                for u in updates:
+                    url = (u.get("ProductURL") or "").strip()
+                    if not url:
+                        empty += 1; continue
+                    fields = []; vals = []
+                    for col in ("Price_CZK", "RecommendRate_pct", "ReviewsCount", "AvgStarRating"):
+                        v = u.get(col)
+                        if v is not None:
+                            fields.append(f"{col} = ?"); vals.append(v)
+                    if not fields:
+                        empty += 1; continue
+                    fields.append("scraped_at = datetime('now')")
+                    res = _c.execute(
+                        f"UPDATE products SET {', '.join(fields)} WHERE ProductURL = ?",
+                        vals + [url],
+                    )
+                    if res.rowcount:
+                        applied += res.rowcount
+                    else:
+                        notfound += 1
+                _c.commit(); _c.close()
+                global _stats_cache, _stats_ts
+                _stats_cache = None; _stats_ts = 0.0
+                self.send_json({"ok": True, "applied": applied,
+                                "notfound": notfound, "empty": empty})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/admin/test-alza":
             # Diagnostic: synchronously fetch ONE Alza URL and report what came back
             try:

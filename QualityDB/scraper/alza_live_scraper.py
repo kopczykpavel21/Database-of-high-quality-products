@@ -21,6 +21,7 @@ Usage:
   python3 -m scraper.alza_live_scraper --priority   # ≥10 reviews only
   python3 -m scraper.alza_live_scraper --limit 500  # first 500
 """
+from __future__ import annotations   # allow `dict | None` hints on Python 3.9
 
 import os
 import re
