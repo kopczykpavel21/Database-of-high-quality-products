@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 """
-scrape_alza_local.py — Run the Alza scraper from a residential IP (your laptop)
-and push fresh price/rating/review data to the LIVE QualityDB on fly.io.
+scrape_alza_local.py — Refresh Alza product data from a residential IP (your
+laptop) and push it to the LIVE QualityDB on fly.io.
 
 Why: Alza blocks fly.io's datacenter IP (HTTP 403). Your home connection is
-served normally, so we scrape here and upload the results via the API.
+served normally, so we scrape here and upload via the API.
 
-Alza rate-limits even residential IPs after a burst, so this runs SLOWLY
-(default 1.8s/request) and backs off exponentially when it hits a 403.
+Data source: Alza's lightweight reviewStats JSON API
+  https://webapi.alza.cz/api/catalog/v2/commodities/{ID}/reviewStats?country=CZ&pgrik=...&ucik=...
+This returns, per product:
+  - ratingAverage      -> AvgStarRating
+  - recommendationRate -> RecommendRate_pct  (×100)
+  - complaint.rate     -> ReturnRate_pct (reklamovanost!)  (×100)
+  - ratingCount        -> ReviewsCount
+The pgrik/ucik session tokens are harvested once from a product page and reused.
+
+Optionally (--with-price) also fetches the full product page for the current
+Price_CZK from JSON-LD (slower, more likely to hit rate-limits).
+
+Alza rate-limits even residential IPs, so this runs slowly with exponential
+backoff on 403.
 
 Usage:
-    python3 scrape_alza_local.py                      # 300 most-reviewed Alza products
+    python3 scrape_alza_local.py                          # 300 most-reviewed
     python3 scrape_alza_local.py --category Smartphones --limit 200
-    python3 scrape_alza_local.py --limit 500 --delay 2.0
-    python3 scrape_alza_local.py --min-reviews 20
-
-Data extracted per product: Price_CZK (in-stock only), RecommendRate_pct,
-ReviewsCount, AvgStarRating. Discontinued products keep their rating/reviews
-refreshed even when price is unavailable.
+    python3 scrape_alza_local.py --with-price --limit 100
+    python3 scrape_alza_local.py --min-reviews 20 --delay 1.5
 """
 from __future__ import annotations
 
@@ -29,6 +37,7 @@ import argparse
 import urllib.request
 
 API = "https://database-of-high-quality-products.fly.dev"
+ALZA_STATS = "https://webapi.alza.cz/api/catalog/v2/commodities/{pid}/reviewStats?country=CZ&pgrik={pgrik}&ucik={ucik}"
 
 try:
     from curl_cffi import requests as cffi
@@ -36,53 +45,82 @@ except ImportError:
     print("Missing dependency. Run:  pip3 install curl_cffi")
     sys.exit(1)
 
+import html as _html
 
-# ── Extraction ────────────────────────────────────────────────────────────────
-def extract(html: str) -> dict:
-    """Pull Price_CZK / RecommendRate_pct / ReviewsCount / AvgStarRating from HTML."""
+
+# ── Token harvesting ──────────────────────────────────────────────────────────
+def harvest_tokens(sess) -> tuple[str, str] | None:
+    """Fetch one product page and extract reusable pgrik/ucik session tokens."""
+    probe = "https://www.alza.cz/bosch-kgn392laf-d8133109.htm"
+    for _ in range(6):
+        r = sess.get(probe, impersonate="chrome120", timeout=15,
+                     headers={"Accept-Language": "cs-CZ,cs;q=0.9", "Referer": "https://www.alza.cz/"})
+        if r.status_code == 200 and "blokována" not in r.text:
+            txt = _html.unescape(r.text)
+            m = re.search(r'reviewStats\?country=CZ&pgrik=([^&"\s]+)&ucik=([^&"\s]+)', txt)
+            if m:
+                return m.group(1), m.group(2)
+            return None
+        time.sleep(20)
+    return None
+
+
+# ── Product ID from URL ───────────────────────────────────────────────────────
+def product_id(url: str) -> str | None:
+    m = re.search(r'-d(\d+)\.htm', url) or re.search(r'[?&]dq=(\d+)', url)
+    return m.group(1) if m else None
+
+
+# ── reviewStats API call ──────────────────────────────────────────────────────
+def get_stats(sess, pid: str, pgrik: str, ucik: str) -> dict | None:
+    """Returns dict with AvgStarRating/RecommendRate_pct/ReturnRate_pct/ReviewsCount, or None."""
+    url = ALZA_STATS.format(pid=pid, pgrik=pgrik, ucik=ucik)
+    r = sess.get(url, impersonate="chrome120", timeout=15,
+                 headers={"Accept": "application/json", "Referer": "https://www.alza.cz/",
+                          "Origin": "https://www.alza.cz"})
+    if r.status_code != 200:
+        return {"_status": r.status_code}
+    try:
+        d = r.json()
+    except Exception:
+        return None
     out = {}
-    # JSON-LD Product (rating + reviews + price)
-    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', html, re.S | re.I):
+    if d.get("ratingAverage") is not None:
+        out["AvgStarRating"] = round(float(d["ratingAverage"]), 2)
+    if d.get("recommendationRate") is not None:
+        out["RecommendRate_pct"] = round(float(d["recommendationRate"]) * 100, 1)
+    if d.get("ratingCount") is not None:
+        out["ReviewsCount"] = int(d["ratingCount"])
+    comp = d.get("complaint") or {}
+    if comp.get("rate") is not None:
+        out["ReturnRate_pct"] = round(float(comp["rate"]) * 100, 2)
+    return out
+
+
+# ── Optional: current price from product page JSON-LD ─────────────────────────
+def get_price(sess, url: str) -> float | None:
+    r = sess.get(url, impersonate="chrome120", timeout=15,
+                 headers={"Accept-Language": "cs-CZ,cs;q=0.9", "Referer": "https://www.alza.cz/"})
+    if r.status_code != 200 or "blokována" in r.text:
+        return None
+    for block in re.findall(r'<script[^>]+application/ld\+json[^>]*>(.*?)</script>', r.text, re.S | re.I):
         try:
             d = json.loads(block)
         except Exception:
             continue
         for it in (d if isinstance(d, list) else [d]):
-            if not isinstance(it, dict) or it.get("@type") != "Product":
-                continue
-            off = it.get("offers") or {}
-            if isinstance(off, list):
-                off = off[0] if off else {}
-            price = off.get("price")
-            avail = (off.get("availability") or "").split("/")[-1]
-            if price and float(price) > 0 and avail != "Discontinued":
-                out["Price_CZK"] = float(price)
-            elif price and float(price) > 0:
-                # Discontinued but has a last-known price — still useful
-                out["Price_CZK"] = float(price)
-            ar = it.get("aggregateRating") or {}
-            if ar.get("ratingValue"):
-                try:
-                    out["AvgStarRating"] = float(ar["ratingValue"])
-                except (ValueError, TypeError):
-                    pass
-            if ar.get("reviewCount"):
-                try:
-                    out["ReviewsCount"] = int(ar["reviewCount"])
-                except (ValueError, TypeError):
-                    pass
-    # Recommend % ("92 % zákazníků doporučuje") — text on the page
-    m = re.search(r'(\d{1,3})\s*%\s*z[aá]kazn[ií]k\w*\s*doporu', html, re.I)
-    if m:
-        out["RecommendRate_pct"] = float(m.group(1))
-    elif "AvgStarRating" in out and "RecommendRate_pct" not in out:
-        # Derive an approximate recommend% from stars (4.8/5 -> 96%)
-        out["RecommendRate_pct"] = round(out["AvgStarRating"] / 5.0 * 100, 1)
-    return out
+            if isinstance(it, dict) and it.get("@type") == "Product":
+                off = it.get("offers") or {}
+                if isinstance(off, list):
+                    off = off[0] if off else {}
+                p = off.get("price")
+                if p and float(p) > 0:
+                    return float(p)
+    return None
 
 
-# ── Fetch URL list from the live DB ───────────────────────────────────────────
-def get_urls(category: str | None, limit: int, min_reviews: int) -> list:
+# ── DB plumbing ───────────────────────────────────────────────────────────────
+def get_urls(category, limit, min_reviews):
     body = json.dumps({"category": category, "limit": limit, "min_reviews": min_reviews}).encode()
     req = urllib.request.Request(API + "/api/admin/alza-urls", data=body,
                                  headers={"Content-Type": "application/json"}, method="POST")
@@ -90,8 +128,7 @@ def get_urls(category: str | None, limit: int, min_reviews: int) -> list:
         return json.loads(r.read()).get("urls", [])
 
 
-# ── Push a batch of updates to the live DB ────────────────────────────────────
-def push(updates: list) -> dict:
+def push(updates):
     body = json.dumps({"updates": updates}).encode()
     req = urllib.request.Request(API + "/api/admin/bulk-update-products", data=body,
                                  headers={"Content-Type": "application/json"}, method="POST")
@@ -101,64 +138,79 @@ def push(updates: list) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--category", default=None, help="NormalizedCategory to restrict to")
-    ap.add_argument("--limit", type=int, default=300, help="Max products to scrape")
-    ap.add_argument("--min-reviews", type=int, default=0, help="Only products with >= N reviews")
-    ap.add_argument("--delay", type=float, default=1.8, help="Seconds between requests")
-    ap.add_argument("--batch", type=int, default=25, help="Upload every N products")
+    ap.add_argument("--category", default=None)
+    ap.add_argument("--limit", type=int, default=300)
+    ap.add_argument("--min-reviews", type=int, default=0)
+    ap.add_argument("--delay", type=float, default=1.2)
+    ap.add_argument("--batch", type=int, default=30)
+    ap.add_argument("--with-price", action="store_true",
+                    help="Also fetch the full product page for current price (slower)")
     args = ap.parse_args()
+
+    sess = cffi.Session()
+    print("Harvesting Alza session tokens…")
+    tok = harvest_tokens(sess)
+    if not tok:
+        print("Could not harvest tokens (Alza blocking). Try again in a few minutes.")
+        return
+    pgrik, ucik = tok
+    print(f"  tokens: pgrik={pgrik} ucik={ucik}")
 
     print(f"Fetching URL list (category={args.category}, limit={args.limit}, min_reviews={args.min_reviews})…")
     urls = get_urls(args.category, args.limit, args.min_reviews)
-    print(f"Got {len(urls)} Alza URLs to refresh.\n")
-    if not urls:
+    # Deduplicate by product id (many URLs are colour variants of the same commodity)
+    seen = {}
+    for u in urls:
+        pid = product_id(u)
+        if pid and pid not in seen:
+            seen[pid] = u
+    items = list(seen.items())
+    print(f"Got {len(urls)} URLs → {len(items)} unique products.\n")
+    if not items:
         return
 
-    sess = cffi.Session()
     pending = []
-    ok = fail = notfound = uploaded = 0
+    ok = fail = uploaded = with_return = 0
     backoff = 0.0
 
-    for i, url in enumerate(urls, 1):
-        try:
-            r = sess.get(url, impersonate="chrome120", timeout=15,
-                         headers={"Accept-Language": "cs-CZ,cs;q=0.9",
-                                  "Referer": "https://www.alza.cz/"})
-            if r.status_code == 404:
-                notfound += 1
-            elif r.status_code == 403 or "blokována" in r.text:
-                # Rate-limited — exponential backoff
-                backoff = min(backoff * 2 if backoff else 30, 300)
-                print(f"  [{i}/{len(urls)}] 403 rate-limited — backing off {backoff:.0f}s…")
-                time.sleep(backoff)
-                continue
-            elif r.status_code == 200:
-                backoff = 0.0
-                data = extract(r.text)
-                if data:
-                    data["ProductURL"] = url
-                    pending.append(data)
-                    ok += 1
-            else:
-                fail += 1
-        except Exception as e:
+    for i, (pid, url) in enumerate(items, 1):
+        stats = get_stats(sess, pid, pgrik, ucik)
+        if stats and stats.get("_status") in (403,):
+            backoff = min(backoff * 2 if backoff else 30, 300)
+            print(f"  [{i}/{len(items)}] 403 — backing off {backoff:.0f}s")
+            time.sleep(backoff)
+            # Re-harvest tokens in case they expired
+            t2 = harvest_tokens(sess)
+            if t2:
+                pgrik, ucik = t2
+            continue
+        backoff = 0.0
+        if not stats or not any(k in stats for k in ("AvgStarRating", "RecommendRate_pct", "ReturnRate_pct")):
             fail += 1
-            print(f"  [{i}/{len(urls)}] error: {str(e)[:50]}")
+        else:
+            rec = {"ProductURL": url, **{k: v for k, v in stats.items() if not k.startswith("_")}}
+            if args.with_price:
+                pr = get_price(sess, url)
+                if pr:
+                    rec["Price_CZK"] = pr
+                time.sleep(args.delay)
+            if "ReturnRate_pct" in rec:
+                with_return += 1
+            pending.append(rec)
+            ok += 1
 
-        # Upload batch
         if len(pending) >= args.batch:
             try:
                 res = push(pending)
                 uploaded += res.get("applied", 0)
-                print(f"  [{i}/{len(urls)}] uploaded batch: {res.get('applied',0)} applied, "
-                      f"{res.get('notfound',0)} not-found  (totals: ok={ok} 404={notfound} fail={fail})")
+                print(f"  [{i}/{len(items)}] uploaded {res.get('applied',0)} "
+                      f"(ok={ok} fail={fail} w/return={with_return})")
             except Exception as e:
                 print(f"  upload error: {str(e)[:60]}")
             pending = []
 
         time.sleep(args.delay)
 
-    # Final batch
     if pending:
         try:
             res = push(pending)
@@ -167,10 +219,10 @@ def main():
             print(f"  final upload error: {str(e)[:60]}")
 
     print(f"\n=== Done ===")
-    print(f"  Scraped OK:   {ok}")
-    print(f"  Uploaded:     {uploaded} product updates applied to live DB")
-    print(f"  404 (delisted): {notfound}")
-    print(f"  Failed:       {fail}")
+    print(f"  Scraped OK:        {ok}")
+    print(f"  With return rate:  {with_return}")
+    print(f"  Uploaded:          {uploaded} updates to live DB")
+    print(f"  Failed/no data:    {fail}")
 
 
 if __name__ == "__main__":

@@ -3977,7 +3977,8 @@ class Handler(BaseHTTPRequestHandler):
                     if not url:
                         empty += 1; continue
                     fields = []; vals = []
-                    for col in ("Price_CZK", "RecommendRate_pct", "ReviewsCount", "AvgStarRating"):
+                    for col in ("Price_CZK", "RecommendRate_pct", "ReviewsCount",
+                                "AvgStarRating", "ReturnRate_pct"):
                         v = u.get(col)
                         if v is not None:
                             fields.append(f"{col} = ?"); vals.append(v)
