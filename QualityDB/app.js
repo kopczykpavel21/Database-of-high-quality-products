@@ -8,7 +8,28 @@ let isListView = false;
 let activeKeyword = "";
 let categoriesTree = [];   // [{main, subs:[{sub,count}]}]
 
-const SOURCE_LABELS = { alza: "Alza.cz", heureka: "Heureka.cz", zbozi: "Zbozi.cz", amazon: "Amazon.de" };
+const SOURCE_LABELS = {
+  alza: "Alza.cz", heureka: "Heureka.cz", zbozi: "Zbozi.cz",
+  amazon: "Amazon.de", otto: "Otto.de", warentest: "Stiftung Warentest",
+  dtest: "D-test.cz", datart: "Datart.cz", ceneo: "Ceneo.pl",
+  fnac: "Fnac.fr", heureka_sk: "Heureka.sk", conrad: "Conrad.de",
+  amazon_us: "Amazon.com"
+};
+
+function repairabilityBadge(score, date) {
+  if (score === null || score === undefined) return "";
+  const num = parseFloat(score);
+  const cls = num >= 7 ? "ir-good" : num >= 4 ? "ir-mid" : "ir-bad";
+  const tip = date ? ` title="Indice de Réparabilité · ${date}"` : ' title="Indice de Réparabilité (French repairability score)"';
+  return `<span class="ir-badge ${cls}"${tip}>🔧 ${num.toFixed(1)}/10</span>`;
+}
+
+function priceStr(p) {
+  if (p.currency === "PLN" && p.Price_CZK) return Math.round(p.Price_CZK).toLocaleString("pl-PL") + " zł";
+  if (p.Price_EUR) return Math.round(p.Price_EUR).toLocaleString("de-DE") + " €";
+  if (p.Price_CZK) return Math.round(p.Price_CZK).toLocaleString("cs-CZ") + " Kč";
+  return "";
+}
 
 // ---- State ----
 function getFilters() {
@@ -50,7 +71,11 @@ async function fetchProducts() {
 }
 
 async function fetchCategories() {
-  const res = await fetch("/api/categories");
+  const src = document.getElementById("filter-source").value;
+  const SOURCE_COUNTRY_MAP = { otto:"DE", warentest:"DE", amazon:"DE", ceneo:"PL",
+                                dtest:"CZ", alza:"CZ", heureka:"CZ", zbozi:"CZ", datart:"CZ" };
+  const country = SOURCE_COUNTRY_MAP[src] || "CZ";
+  const res = await fetch(`/api/categories?country=${country}`);
   categoriesTree = await res.json();
 
   const mainSel = document.getElementById("filter-main-category");
@@ -148,7 +173,7 @@ function renderCard(p) {
   const starsDisplay = p.AvgStarRating ? p.AvgStarRating.toFixed(1) : "—";
   const recommendDisplay = p.RecommendRate_pct ? p.RecommendRate_pct + "%" : "—";
   const reviewsDisplay = p.ReviewsCount ? p.ReviewsCount.toLocaleString() : "—";
-  const priceDisplay = p.Price_CZK ? Math.round(p.Price_CZK).toLocaleString() + " Kč" : "";
+  const priceDisplay = priceStr(p);
   const sourceLabel = SOURCE_LABELS[p.source] || p.source || "Unknown";
   const sourceCls = p.source === "alza" ? "source-badge" : `source-badge scraper src-${p.source}`;
   const sourceBadge = `<span class="${sourceCls}">${sourceLabel}</span>`;
@@ -189,6 +214,7 @@ function renderCard(p) {
       </div>
     </div>
     ${cardTags ? `<div class="card-tags">${cardTags}</div>` : ""}
+    ${repairabilityBadge(p.repairability_score_fr, p.repairability_score_date)}
     <div class="card-stars">
       <span class="stars-visual">${starsVisual(p.AvgStarRating)}</span>
       <span>${starsDisplay}</span>
@@ -273,23 +299,56 @@ function openModal(jsonStr) {
   const overlay = document.getElementById("modal-overlay");
   const content = document.getElementById("modal-content");
 
-  const totalRatings = (p.Stars5_Count || 0) + (p.Stars4_Count || 0) + (p.Stars3_Count || 0)
-    + (p.Stars2_Count || 0) + (p.Stars1_Count || 0);
+  // Parse details_json for source-specific extras
+  let dj = {};
+  try { dj = p.details_json ? JSON.parse(p.details_json) : {}; } catch(e) {}
 
-  function barPct(cnt) {
-    return totalRatings ? Math.round((cnt || 0) / totalRatings * 100) : 0;
+  // Star bars — ceneo stores star_distribution as percentages; others use raw counts
+  let starBars = "";
+  if (p.source === "ceneo") {
+    const sd = dj.star_distribution || {};
+    starBars = [5,4,3,2,1].map(n => {
+      const pct = sd[String(n)] || 0;
+      return `
+      <div class="star-bar-row">
+        <span class="star-bar-label">★${n}</span>
+        <div class="star-bar-track"><div class="star-bar-fill" style="width:${pct}%"></div></div>
+        <span class="star-bar-count">${pct}%</span>
+      </div>`;
+    }).join("");
+  } else {
+    const totalRatings = (p.Stars5_Count || 0) + (p.Stars4_Count || 0) + (p.Stars3_Count || 0)
+      + (p.Stars2_Count || 0) + (p.Stars1_Count || 0);
+    if (totalRatings > 0) {
+      starBars = [5,4,3,2,1].map(n => {
+        const cnt = p[`Stars${n}_Count`] || 0;
+        const pct = Math.round(cnt / totalRatings * 100);
+        return `
+        <div class="star-bar-row">
+          <span class="star-bar-label">★${n}</span>
+          <div class="star-bar-track"><div class="star-bar-fill" style="width:${pct}%"></div></div>
+          <span class="star-bar-count">${cnt}</span>
+        </div>`;
+      }).join("");
+    }
   }
 
-  const starBars = [5,4,3,2,1].map(n => {
-    const cnt = p[`Stars${n}_Count`] || 0;
-    const pct = barPct(cnt);
-    return `
-    <div class="star-bar-row">
-      <span class="star-bar-label">★${n}</span>
-      <div class="star-bar-track"><div class="star-bar-fill" style="width:${pct}%"></div></div>
-      <span class="star-bar-count">${cnt}</span>
-    </div>`;
-  }).join("");
+  // Ceneo feature scores block
+  const featScores = dj.feature_scores || {};
+  const featKeys = Object.keys(featScores);
+  const featBlock = featKeys.length > 0 ? `
+    <div class="modal-keywords" style="margin-top:12px">
+      <div class="modal-keywords-label">User ratings by feature</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:6px;margin-top:6px">
+        ${featKeys.map(k => `
+          <div style="background:var(--surface2);border-radius:6px;padding:6px 8px;font-size:12px">
+            <div style="color:var(--text2);margin-bottom:2px">${escHtml(k)}</div>
+            <div style="font-weight:600;color:${featScores[k]>=90?'var(--green)':featScores[k]>=75?'var(--amber)':'var(--red)'}">${featScores[k]}%</div>
+          </div>`).join("")}
+      </div>
+    </div>` : "";
+
+  const totalRatings = 0; // used below only for the old path (now handled above)
 
   content.innerHTML = `
     <div class="modal-category">${escHtml(p.Category || "")}</div>
@@ -316,13 +375,32 @@ function openModal(jsonStr) {
       </div>
       <div class="modal-metric">
         <div class="modal-metric-label">Price</div>
-        <div class="modal-metric-value">
-          ${p.Price_CZK ? Math.round(p.Price_CZK).toLocaleString() + " Kč" : "—"}
-        </div>
+        <div class="modal-metric-value">${priceStr(p) || "—"}</div>
       </div>
     </div>
 
-    ${totalRatings > 0 ? `<div class="star-bar-wrap">${starBars}</div>` : ""}
+    ${p.repairability_score_fr != null ? `
+    <div class="ir-modal-block">
+      <div class="ir-modal-label">🔧 Indice de Réparabilité <span class="ir-modal-sub">(French Repairability Index)</span></div>
+      <div class="ir-modal-score-row">
+        <span class="ir-modal-score ${parseFloat(p.repairability_score_fr) >= 7 ? 'ir-good' : parseFloat(p.repairability_score_fr) >= 4 ? 'ir-mid' : 'ir-bad'}">${parseFloat(p.repairability_score_fr).toFixed(1)} / 10</span>
+        ${p.repairability_score_date ? `<span class="ir-modal-date">Updated ${p.repairability_score_date}</span>` : ""}
+      </div>
+      ${(() => {
+        if (!p.repairability_sub_scores_json) return "";
+        try {
+          const sub = JSON.parse(p.repairability_sub_scores_json);
+          const labels = { C1: "Documentation", C2: "Disassembly", C3: "Spare parts", C4: "Parts price ratio", C5: "Manufacturer support" };
+          return `<div class="ir-sub-scores">${Object.entries(sub).map(([k,v]) =>
+            `<div class="ir-sub"><span class="ir-sub-label">${labels[k] || k}</span><span class="ir-sub-val">${parseFloat(v).toFixed(2)}</span></div>`
+          ).join("")}</div>`;
+        } catch(e) { return ""; }
+      })()}
+    </div>` : ""}
+
+    ${starBars ? `<div class="star-bar-wrap">${starBars}</div>` : ""}
+
+    ${featBlock}
 
     ${p.Description ? `<div class="modal-desc">${escHtml(p.Description).substring(0, 500)}${p.Description.length > 500 ? "…" : ""}</div>` : ""}
 
@@ -505,7 +583,14 @@ document.addEventListener("DOMContentLoaded", () => {
     triggerSearchAndClose();
   });
 
-  ["filter-category", "filter-source", "sort-by"].forEach(id => {
+  document.getElementById("filter-source").addEventListener("change", () => {
+    // Re-fetch categories in the correct country when source changes
+    document.getElementById("filter-main-category").value = "";
+    populateSubcategories("");
+    fetchCategories();
+    triggerSearchAndClose();
+  });
+  ["filter-category", "sort-by"].forEach(id => {
     document.getElementById(id).addEventListener("change", triggerSearchAndClose);
   });
   [starSlider, returnSlider, reviewsSlider, recommendSlider].forEach(sl => {

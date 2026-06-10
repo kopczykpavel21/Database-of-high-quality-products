@@ -388,6 +388,70 @@ input[type="range"] {
   border-color: var(--accent);
 }
 
+/* ── card-top-row: source badge + quality badge side by side ─────────────── */
+.card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.card-top-row .source-badge {
+  position: static;   /* override absolute positioning inside the flex row */
+}
+
+/* ── Quality badges ───────────────────────────────────────────────────────── */
+.quality-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+.badge-excellent {
+  background: linear-gradient(135deg, #fff8e1, #ffe082);
+  color: #5d4037;
+  border: 1px solid #ffd54f;
+}
+.badge-good {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border: 1px solid #a5d6a7;
+}
+.badge-warn {
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc02;
+}
+.badge-bad {
+  background: #fce4ec;
+  color: #b71c1c;
+  border: 1px solid #ef9a9a;
+}
+
+/* Warentest sub-ratings row */
+.wt-sub-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px 6px;
+}
+.wt-sub {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  cursor: default;
+}
+.wt-sub b { font-weight: 700; }
+.wt-sehr-gut     { background: #e8f5e9; color: #1b5e20; border: 1px solid #81c784; }
+.wt-gut          { background: #f1f8e9; color: #33691e; border: 1px solid #aed581; }
+.wt-befriedigend { background: #fff8e1; color: #e65100; border: 1px solid #ffcc02; }
+.wt-ausreichend  { background: #fce4ec; color: #b71c1c; border: 1px solid #ef9a9a; }
+.wt-mangelhaft   { background: #ffebee; color: #7f0000; border: 1px solid #e57373; }
+
 .source-badge {
   position: absolute;
   top: 10px;
@@ -401,15 +465,77 @@ input[type="range"] {
   text-transform: uppercase;
   letter-spacing: .04em;
 }
-.source-badge.scraper      { background: var(--accent-light); color: var(--accent); }
-.source-badge.src-heureka  { background: #fff3e0; color: #e65100; }
-.source-badge.src-zbozi    { background: #e8f5e9; color: #2e7d32; }
-.source-badge.src-amazon   { background: #fff8e1; color: #f57f17; }
+.source-badge.scraper          { background: var(--accent-light); color: var(--accent); }
+.source-badge.src-heureka      { background: #fff3e0; color: #e65100; }
+.source-badge.src-zbozi        { background: #e8f5e9; color: #2e7d32; }
+.source-badge.src-amazon       { background: #fff8e1; color: #f57f17; }
+.source-badge.src-amazon_us    { background: #232f3e; color: #ff9900; }
+.source-badge.src-fnac         { background: #e8eaf6; color: #3949ab; }
+.source-badge.src-fr_ir        { background: #e3f2fd; color: #0d47a1; font-weight: 700; }
 
-.source-metric             { font-weight: 600; font-size: 13px; }
-.source-metric.src-heureka { color: #e65100; }
-.source-metric.src-zbozi   { color: #2e7d32; }
-.source-metric.src-amazon  { color: #f57f17; }
+.source-metric                 { font-weight: 600; font-size: 13px; }
+.source-metric.src-heureka     { color: #e65100; }
+.source-metric.src-zbozi       { color: #2e7d32; }
+.source-metric.src-amazon      { color: #f57f17; }
+.source-metric.src-amazon_us   { color: #ff9900; }
+
+/* ── Indice de Réparabilité badge (card) ─────────────────────────────────── */
+.ir-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin: 4px 0 2px;
+  letter-spacing: .02em;
+}
+.ir-badge.ir-good { background: #e8f5e9; color: #2e7d32; }
+.ir-badge.ir-mid  { background: #fff8e1; color: #e65100; }
+.ir-badge.ir-bad  { background: #fce4ec; color: #b71c1c; }
+
+/* ── Indice de Réparabilité block (modal) ────────────────────────────────── */
+.ir-modal-block {
+  background: #f0f4ff;
+  border: 1px solid #c5d0f5;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 12px 0;
+}
+.ir-modal-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3949ab;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.ir-modal-sub { font-weight: 400; text-transform: none; color: #666; }
+.ir-modal-score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.ir-modal-score {
+  font-size: 22px;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 8px;
+}
+.ir-modal-score.ir-good { background: #e8f5e9; color: #2e7d32; }
+.ir-modal-score.ir-mid  { background: #fff8e1; color: #e65100; }
+.ir-modal-score.ir-bad  { background: #fce4ec; color: #b71c1c; }
+.ir-modal-date { font-size: 11px; color: #888; }
+.ir-sub-scores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin-top: 6px;
+}
+.ir-sub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  padding: 2px 0;
+  border-bottom: 1px solid #d5dcf5;
+}
+.ir-sub-label { color: #555; }
+.ir-sub-val   { font-weight: 700; color: #3949ab; }
 
 /* ── Keyword filter pills (sidebar) ──────────────────────────────────────── */
 .kw-filter-pills {
@@ -750,3 +876,816 @@ input[type="range"] {
 
 .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
 .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text2); margin-bottom: 6px; }
+
+/* ---- LANGUAGE TOGGLE ---- */
+.header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+.lang-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 3px;
+}
+.lang-btn {
+  padding: 4px 14px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  letter-spacing: .03em;
+}
+.lang-btn:hover {
+  color: var(--accent);
+}
+.lang-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(79,70,229,.35);
+}
+
+/* ---- COUNTRY TOGGLE ---- */
+.country-toggle {
+  display: flex;
+  gap: 8px;
+}
+.country-btn {
+  flex: 1;
+  padding: 8px 10px;
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+}
+.country-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.country-btn.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---- WARENTEST / DTEST CARDS ---- */
+.src-warentest { background: #c0392b; }
+.src-dtest     { background: #2980b9; }
+
+/* Grade colour classes */
+.grade-very-good { color: #059669; font-weight: 700; }
+.grade-good      { color: #16a34a; font-weight: 700; }
+.grade-ok        { color: #d97706; font-weight: 700; }
+.grade-warn      { color: #ea580c; font-weight: 700; }
+.grade-bad       { color: #dc2626; font-weight: 700; }
+
+/* Sub-rating pills on cards */
+.wt-sub-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+.wt-sub {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  cursor: default;
+}
+
+/* Test program label */
+.wt-test-prog {
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Modal sub-rating table */
+.wt-modal-sub-ratings {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.wt-sub-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.wt-sub-row:last-child { border-bottom: none; }
+.wt-sub-row:nth-child(even) { background: var(--surface2); }
+.wt-sub-name  { color: var(--text2); }
+.wt-sub-grade { font-weight: 600; }
+
+/* ---- WARENTEST CARD HEADER (category always visible, WT badge in corner) ---- */
+.wt-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+.wt-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  background: #c0392b;
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+}
+.wt-card-header .card-category {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0;
+}
+
+/* Grade number displayed smaller next to label */
+.grade-num {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: inherit;
+  opacity: 0.8;
+}
+
+/* "?" help button showing grade scale on hover */
+.grade-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text3);
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 3px;
+}
+.grade-help:hover { background: var(--accent-light); color: var(--accent); }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   SCORE BARS  (D-test % scale + Warentest grade scale)
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.score-bars { display: flex; flex-direction: column; gap: 3px; margin: 8px 0 4px; }
+
+.score-bar-row {
+  display: grid;
+  grid-template-columns: 78px 1fr 34px;
+  align-items: center;
+  gap: 5px;
+}
+.score-bar-label {
+  font-size: 10px; color: var(--text2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-transform: capitalize;
+}
+.score-bar-track {
+  height: 5px; background: var(--surface2);
+  border-radius: 3px; overflow: hidden;
+}
+.score-bar-fill {
+  height: 100%; border-radius: 3px; transition: width .35s ease;
+}
+.score-bar-val {
+  font-size: 10px; font-weight: 700; text-align: right;
+  color: var(--text1); white-space: nowrap;
+}
+
+/* Fill colours (used on .score-bar-fill) */
+.fill-great { background: #059669; }
+.fill-good  { background: #16a34a; }
+.fill-ok    { background: #d97706; }
+.fill-warn  { background: #ea580c; }
+.fill-bad   { background: #dc2626; }
+
+/* Matching text colours (used on .score-bar-val, .dt-score-big, etc.) */
+.text-great { color: #059669; }
+.text-good  { color: #16a34a; }
+.text-ok    { color: #d97706; }
+.text-warn  { color: #ea580c; }
+.text-bad   { color: #dc2626; }
+
+/* Wider rows in modal */
+.modal-score-bars .score-bar-row  { grid-template-columns: 130px 1fr 40px; }
+.modal-score-bars .score-bar-track { height: 7px; }
+.modal-score-bars .score-bar-label { font-size: 11px; }
+.modal-score-bars .score-bar-val   { font-size: 11px; }
+
+/* ── Warentest card: grade label pill inline with grade number ─────────────── */
+.wt-grade-metric .metric-value {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 1.3em;
+  font-weight: 700;
+}
+.wt-grade-label {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+
+/* ── Warentest modal ──────────────────────────────────────────────────────────── */
+.wt-modal-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 10px 0 14px;
+}
+.wt-modal-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+/* Grade hero: circle + meta info side by side */
+.wt-modal-grade-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.wt-modal-grade-circle {
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid currentColor;
+  gap: 1px;
+}
+.wt-modal-grade-circle.wt-sehr-gut  { background: #e8f5e9; color: #1b5e20; border-color: #4caf50; }
+.wt-modal-grade-circle.wt-gut       { background: #f1f8e9; color: #33691e; border-color: #8bc34a; }
+.wt-modal-grade-circle.wt-befriedigend { background: #fff8e1; color: #e65100; border-color: #ffb300; }
+.wt-modal-grade-circle.wt-ausreichend  { background: #fce4ec; color: #b71c1c; border-color: #ef9a9a; }
+.wt-modal-grade-circle.wt-mangelhaft   { background: #ffebee; color: #7f0000; border-color: #e57373; }
+.wt-modal-grade-num {
+  font-size: 1.9em;
+  font-weight: 800;
+  line-height: 1;
+}
+.wt-modal-grade-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  opacity: 0.85;
+}
+
+/* Meta info rows next to the circle */
+.wt-modal-grade-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 4px;
+}
+.wt-meta-row {
+  font-size: 12px;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wt-meta-row strong { color: var(--text1); }
+
+/* Sub-rating bars in modal */
+.wt-modal-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 4px;
+}
+.wt-bar-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 34px 58px;
+  align-items: center;
+  gap: 6px;
+}
+.wt-bar-label {
+  font-size: 11px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wt-bar-track {
+  height: 7px;
+}
+.wt-bar-word {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Verdict block */
+.wt-modal-verdict {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.wt-modal-verdict-text {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+  margin-top: 6px;
+  font-style: italic;
+}
+
+/* ── D-test card ─────────────────────────────────────────────────────────────── */
+.dt-badge {
+  flex-shrink: 0;
+  font-size: 10px; font-weight: 800;
+  background: #1d4ed8; color: #fff;
+  padding: 2px 6px; border-radius: 4px;
+  letter-spacing: 0.5px; margin-left: 6px;
+}
+.dt-overall {
+  display: flex; align-items: baseline; gap: 7px;
+  margin: 5px 0 3px;
+}
+.dt-score-big { font-size: 21px; font-weight: 900; line-height: 1; }
+.dt-grade-text { font-size: 11px; color: var(--text2); font-style: italic; }
+
+/* ── D-test modal header ─────────────────────────────────────────────────────── */
+.dt-modal-hd {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.dt-modal-score { font-size: 38px; font-weight: 900; line-height: 1; }
+.dt-modal-right { display: flex; flex-direction: column; gap: 3px; }
+.dt-modal-grade { font-size: 15px; font-weight: 700; }
+.dt-modal-meta  { font-size: 12px; color: var(--text2); }
+.dt-modal-meta strong { color: var(--text1); }
+
+/* ── Collapsible modal sections ──────────────────────────────────────────────── */
+.modal-section { margin: 12px 0 0; }
+.modal-section-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text2); cursor: pointer;
+  padding: 6px 0; border-bottom: 1px solid var(--border); user-select: none;
+}
+.modal-section-hd:hover { color: var(--accent); }
+.modal-section-chev { font-size: 10px; transition: transform .2s; }
+.modal-section-hd.open .modal-section-chev { transform: rotate(180deg); }
+.modal-section-body { padding-top: 6px; }
+.modal-section-body.hidden { display: none; }
+
+/* ── Category score rows (clickable, expand sub-params) ─────────────────────── */
+.cat-score-row {
+  cursor: pointer; border-radius: 4px; padding: 1px 3px; margin: 1px -3px;
+}
+.cat-score-row:hover { background: var(--surface2); }
+.cat-score-row.expanded .score-bar-label { font-weight: 700; color: var(--text1); }
+.cat-params {
+  padding: 3px 0 6px 10px;
+  border-left: 2px solid var(--border);
+  margin: 1px 0 4px 8px;
+}
+.cat-params.hidden { display: none; }
+.cat-param-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 2px 0; font-size: 11px;
+}
+.cat-param-key { color: var(--text2); flex: 1; }
+.cat-param-val { font-weight: 500; white-space: nowrap; }
+
+/* ── Technical spec table ────────────────────────────────────────────────────── */
+.spec-section { margin-bottom: 10px; }
+.spec-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text3); margin: 8px 0 4px;
+}
+.spec-kv {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px;
+}
+.spec-row { display: contents; }
+.spec-row > span {
+  font-size: 11px; padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+.spec-row > span:first-child { color: var(--text2); }
+.spec-row > span:last-child  { font-weight: 500; color: var(--text1); }
+
+/* ── Products to avoid ───────────────────────────────────────────────────────── */
+.avoid-btn {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1.5px dashed #e57373;
+  background: transparent; color: #e57373; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .15s; text-align: center;
+}
+.avoid-btn:hover { background: rgba(229,115,115,.08); }
+.avoid-btn-active {
+  background: #e57373 !important; color: #fff !important;
+  border-style: solid !important;
+}
+.avoid-info {
+  margin-top: 6px; font-size: 11px; color: #e57373;
+  background: rgba(229,115,115,.08); border-radius: 6px; padding: 5px 8px;
+}
+
+/* ── Keyword clear button ────────────────────────────────────────────────────── */
+.kw-clear-btn {
+  background: none; border: 1px solid var(--border); border-radius: 12px;
+  padding: 2px 8px; font-size: 10px; color: var(--text2); cursor: pointer;
+  transition: all .15s;
+}
+.kw-clear-btn:hover { background: var(--danger, #e57373); color: #fff; border-color: transparent; }
+
+/* ── Indice de Réparabilité — card sub-criteria bar row ───────────────────── */
+.ir-sub-row {
+  display: flex;
+  gap: 4px;
+  margin: 5px 0 3px;
+  padding: 6px 8px;
+  background: #f0f4ff;
+  border-radius: 8px;
+  border: 1px solid #dce3f8;
+}
+.ir-sub-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.ir-sub-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #3949ab;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.ir-sub-bar {
+  width: 100%;
+  height: 5px;
+  background: #dce3f8;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ir-sub-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width .3s ease;
+}
+.ir-sub-fill.ir-good { background: #43a047; }
+.ir-sub-fill.ir-mid  { background: #fb8c00; }
+.ir-sub-fill.ir-bad  { background: #e53935; }
+.ir-sub-val {
+  font-size: 9px;
+  font-weight: 600;
+  color: #555;
+}
+
+/* ── French legal note (replaces star row when no reviews) ────────────────── */
+.card-stars.ir-legal-note {
+  font-size: 10px;
+  color: #3949ab;
+  background: #f0f4ff;
+  border-radius: 6px;
+  padding: 3px 7px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* ── Cross-market panel ──────────────────────────────────────────────────── */
+#cross-market-panel {
+  padding: 0 16px 32px;
+}
+.cross-market-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 14px;
+  flex-wrap: wrap;
+}
+.cross-market-title {
+  font-weight: 700;
+  font-size: 1.05em;
+  color: #1a237e;
+  flex: 1;
+}
+#cross-market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.cm-card {
+  background: #fff;
+  border: 1px solid #dde3ed;
+  border-radius: 12px;
+  padding: 14px 16px;
+  transition: box-shadow 0.15s;
+}
+.cm-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.10); }
+.cm-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cm-token {
+  font-family: monospace;
+  font-size: 0.85em;
+  background: #e8f0fe;
+  color: #1a237e;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-weight: 700;
+}
+.cm-markets {
+  font-size: 0.78em;
+  color: #555;
+  flex: 1;
+}
+.cm-range {
+  font-size: 0.75em;
+  color: #666;
+  margin-bottom: 8px;
+  display: flex;
+  gap: 12px;
+}
+.cm-products {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.cm-product-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.8em;
+}
+.cm-product-flag {
+  font-size: 0.9em;
+  min-width: 18px;
+}
+.cm-product-name {
+  flex: 1;
+  color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cm-product-source {
+  font-size: 0.75em;
+  color: #888;
+  white-space: nowrap;
+}
+.cm-product-rate {
+  font-size: 0.75em;
+  color: #2e7d32;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cm-product-price {
+  font-size: 0.75em;
+  color: #555;
+  white-space: nowrap;
+}
+
+/* ── Data Health Panel ──────────────────────────────────────────────────── */
+.status-health-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 4px 10px;
+  border-radius: 20px;
+  transition: background 0.15s;
+}
+.status-health-btn:hover { background: rgba(0,0,0,0.07); }
+
+.health-panel {
+  position: fixed;
+  top: 0; right: 0;
+  width: 380px;
+  max-width: 95vw;
+  height: 100vh;
+  background: #fff;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.13);
+  z-index: 1100;
+  overflow-y: auto;
+  animation: slideInRight 0.22s ease;
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.health-panel-inner { padding: 20px; }
+.health-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 1em;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #eee;
+}
+.health-summary {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.health-summary-pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 500;
+}
+.health-pill-ok    { background: #e8f5e9; color: #2e7d32; }
+.health-pill-warn  { background: #fff8e1; color: #f57f17; }
+.health-pill-stale { background: #fdecea; color: #c62828; }
+.health-pill-total { background: #f0f4ff; color: #1565c0; }
+
+.health-rows { display: flex; flex-direction: column; gap: 8px; }
+.health-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  align-items: start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fafafa;
+  border: 1px solid #eee;
+  font-size: 0.82em;
+}
+.health-row:hover { border-color: #ddd; background: #f5f5f5; }
+.health-dot { font-size: 10px; margin-top: 3px; }
+.health-dot-ok    { color: #43a047; }
+.health-dot-warn  { color: #ffa000; }
+.health-dot-stale { color: #e53935; }
+.health-dot-unknown { color: #bbb; }
+
+.health-row-info {}
+.health-row-name { font-weight: 600; color: #222; margin-bottom: 2px; }
+.health-row-meta { color: #888; font-size: 0.92em; }
+.health-row-count {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+  text-align: right;
+}
+.health-row-errors {
+  font-size: 0.8em;
+  color: #e53935;
+  margin-top: 2px;
+}
+
+/* ── Movers panel ─────────────────────────────────────────────────────────── */
+.movers-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.movers-title {
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text1);
+  flex: 1;
+}
+.movers-section {
+  margin-bottom: 28px;
+}
+.movers-section-title {
+  font-size: 0.88em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 6px 0 8px;
+  border-bottom: 2px solid;
+  margin-bottom: 8px;
+}
+.mover-up-title   { color: #43a047; border-color: #43a047; }
+.mover-down-title { color: #e53935; border-color: #e53935; }
+
+.movers-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.movers-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: #888;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.movers-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+.movers-table tr:hover td { background: #f9f9f9; }
+.mover-name a { color: var(--accent); text-decoration: none; }
+.mover-name a:hover { text-decoration: underline; }
+.mover-val   { color: #555; text-align: right; white-space: nowrap; }
+.mover-delta { font-weight: 700; text-align: right; white-space: nowrap; }
+.mover-up    { color: #43a047; }
+.mover-down  { color: #e53935; }
+
+/* ── Modal history / sparklines ──────────────────────────────────────────── */
+.modal-history {
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.modal-history-title {
+  font-size: 0.82em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin-bottom: 14px;
+}
+#modal-history-chart {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.sparkline-wrap {
+  flex: 0 0 auto;
+  min-width: 140px;
+}
+.sparkline-label {
+  font-size: 0.75em;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.sparkline-svg {
+  display: block;
+  overflow: visible;
+}
+.sparkline-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 0.72em;
+  margin-top: 3px;
+}
+.sparkline-range { color: #bbb; }
+.sparkline-last  { color: #333; font-weight: 600; }
+.sparkline-delta { font-weight: 700; }

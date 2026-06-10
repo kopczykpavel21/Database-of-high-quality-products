@@ -27,6 +27,7 @@ import sqlite3
 import os
 import sys
 import json
+from scraper.snapshots import ensure_snapshot_table, record_snapshot
 
 try:
     from curl_cffi import requests
@@ -40,9 +41,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "products.db")
 
 # ── Thresholds ────────────────────────────────────────────────────────────────
-MIN_RATING_PCT = 80    # Zbozi rating is 0–100%.  80 ≈ 4 stars
-MIN_REVIEWS    = 5     # Minimum review count
-STOP_BELOW_PCT = 75    # Stop category when rating drops below this
+MIN_RATING_PCT = 0     # 0 = collect all ratings (full distribution)
+MIN_REVIEWS    = 10    # keep at 10 for reliability
+STOP_BELOW_PCT = 0     # 0 = never stop early based on score
 PAGE_SIZE      = 24    # Products per API request
 MAX_PAGES      = 8     # Max pages per category
 REQUEST_DELAY  = 1.5   # Seconds between requests
@@ -127,35 +128,54 @@ def fetch_page(slug: str, offset: int, session) -> dict:
 
 # ── Database helpers ──────────────────────────────────────────────────────────
 
-def load_existing_names(conn):
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
-    return {r[0] for r in rows}
+def load_existing(conn):
+    """Return sets of already-known (lower-name, url) for fast dedup."""
+    rows = conn.execute("SELECT lower(Name), ProductURL FROM products").fetchall()
+    names = {r[0] for r in rows}
+    urls  = {r[1] for r in rows if r[1]}
+    return names, urls
 
 
 def insert_products(conn, products, category):
-    existing = load_existing_names(conn)
+    ensure_snapshot_table(conn)
+    existing_names, existing_urls = load_existing(conn)
     inserted = 0
     for p in products:
         key = p["Name"].lower()
-        if key in existing:
+        url = p.get("ProductURL", "")
+
+        # Skip if we already have this product by either name or URL — the
+        # products table has a UNIQUE constraint on ProductURL, so checking
+        # both here prevents a hard IntegrityError that would abort the whole
+        # category and leave the connection in a bad transaction state.
+        if key in existing_names or (url and url in existing_urls):
+            record_snapshot(conn, url, "zbozi", p, country="CZ")
             continue
+
         conn.execute(
-            """INSERT INTO products
+            """INSERT OR IGNORE INTO products
                (Name, Category, ProductURL, Price_CZK,
                 RecommendRate_pct, ReviewsCount, source)
                VALUES (?,?,?,?,?,?,?)""",
             (
                 p["Name"],
                 category,
-                p.get("ProductURL", ""),
+                url,
                 p.get("Price_CZK"),
                 p.get("RecommendRate_pct"),
                 p.get("ReviewsCount", 0),
                 "zbozi",
             )
         )
-        existing.add(key)
+        existing_names.add(key)
+        if url:
+            existing_urls.add(url)
         inserted += 1
+
+        # Always record a snapshot — for both new AND existing products.
+        # This builds the longitudinal panel for trend/ODA analysis.
+        record_snapshot(conn, url, "zbozi", p, country="CZ")
+
     conn.commit()
     return inserted
 
@@ -189,6 +209,14 @@ def scrape_category(cat, session, conn):
             price_h = item.get("minPrice")    # in halíř (÷100 = Kč)
 
             if not name or rating is None:
+                continue
+
+            # Skip Zbozi.cz click-tracking redirect URLs.
+            # The API sometimes returns "/exit-click-web?..." paths instead of
+            # the canonical "https://www.zbozi.cz/nabidka/..." product URL.
+            # These session-scoped redirects are useless as stable product keys.
+            if not url.startswith("https://www.zbozi.cz/"):
+                log.debug(f"  Skipping non-canonical Zbozi URL: {url[:80]}")
                 continue
 
             products.append({
@@ -242,7 +270,7 @@ def run_scraper():
     warm_up_session(session)
     time.sleep(REQUEST_DELAY)
 
-    conn    = sqlite3.connect(DB_PATH)
+    conn    = sqlite3.connect(DB_PATH, timeout=30)
     summary = {"categories_scraped": 0, "total_added": 0, "errors": []}
 
     for cat in CATEGORIES:
@@ -253,6 +281,13 @@ def run_scraper():
         except Exception as e:
             log.error(f"Error scraping {cat['name']}: {e}")
             summary["errors"].append({"category": cat["name"], "error": str(e)})
+            # Roll back any partial writes so the connection is clean for the
+            # next category — without this, a failed INSERT leaves an open
+            # transaction that poisons all subsequent DB operations.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         time.sleep(REQUEST_DELAY)
 
     conn.close()

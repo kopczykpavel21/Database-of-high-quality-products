@@ -91,3 +91,4 @@ CATEGORIES = [
     {"name": "IP Cameras",          "url": "https://zabezpeceni.heureka.cz/ip-kamery/"},
     {"name": "Smart Home",          "url": "https://chytra-domacnost.heureka.cz/"},
 ]
+from config_de_additions import *

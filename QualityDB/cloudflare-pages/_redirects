@@ -1,0 +1,2 @@
+# Cloudflare Pages — redirect all unknown paths to index.html (SPA routing)
+/*    /index.html    200

@@ -1,0 +1,6 @@
+# Cloudflare Pages — custom headers
+/static/*
+  Cache-Control: public, max-age=86400
+
+/index.html
+  Cache-Control: public, max-age=120

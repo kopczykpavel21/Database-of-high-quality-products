@@ -5,6 +5,7 @@ primary_region = "ams"
 
 [env]
   DB_PATH = "/data/products.db"
+  SNAPSHOTS_DB_PATH = "/data/snapshots.db"
 
 [http_service]
   internal_port = 8080

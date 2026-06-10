@@ -2,6 +2,10 @@
 products.db
 products.db-wal
 products.db-shm
+products.db.bak
+snapshots.db
+snapshots.db-wal
+snapshots.db-shm
 
 # HuggingFace download cache
 QualityDB/scraper/.hf_cache/
