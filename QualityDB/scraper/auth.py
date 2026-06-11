@@ -28,6 +28,8 @@ import time
 from email.mime.text import MIMEText
 from typing import Optional
 
+from scraper.snapshots import ensure_snapshot_table, record_snapshot
+
 DB_PATH = os.environ.get(
     "USERS_DB_PATH",
     os.path.join(os.path.dirname(os.path.dirname(__file__)), "users.db"),
@@ -623,6 +625,7 @@ def maybe_merge_staged(products_db_path: str) -> int:
 
     merged_count = 0
     prod_conn = sqlite3.connect(products_db_path, timeout=30)
+    ensure_snapshot_table(prod_conn)
 
     for (url,) in candidates:
         rows = users_conn.execute(
@@ -693,6 +696,30 @@ def maybe_merge_staged(products_db_path: str) -> int:
 
             prod_conn.commit()
 
+            # Record a snapshot so this price/recommend update shows up in the
+            # "Has price history" filter and snapshot-deltas/movers over time.
+            try:
+                cur = prod_conn.execute(
+                    "SELECT RecommendRate_pct, ReviewsCount, AvgStarRating, "
+                    "Price_CZK, Price_EUR FROM products WHERE ProductURL = ?",
+                    (url,),
+                ).fetchone()
+                if cur:
+                    record_snapshot(
+                        prod_conn, url, source,
+                        {
+                            "RecommendRate_pct": cur[0],
+                            "ReviewsCount":      cur[1],
+                            "AvgStarRating":     cur[2],
+                            "Price_CZK":         cur[3],
+                            "Price_EUR":         cur[4],
+                        },
+                        country=country,
+                    )
+            except Exception as _se:
+                import logging
+                logging.warning(f"snapshot failed for {url}: {_se}")
+
             # Mark all staging rows for this URL as merged
             users_conn.execute(
                 "UPDATE staging_products SET merged = 1 WHERE product_url = ?", (url,)
@@ -729,6 +756,7 @@ def force_merge_user_staged(user_id: int, products_db_path: str) -> dict:
         return {"merged": 0, "skipped": 0, "already_exists": 0}
 
     prod_conn = sqlite3.connect(products_db_path, timeout=30)
+    ensure_snapshot_table(prod_conn)
     merged = 0
     skipped = 0
     already = 0
@@ -776,6 +804,31 @@ def force_merge_user_staged(user_id: int, products_db_path: str) -> dict:
                 else:
                     already += 1  # URL variant already in DB (trailing slash, case, etc.)
             prod_conn.commit()
+
+            # Record a snapshot so this price/recommend update shows up in the
+            # "Has price history" filter and snapshot-deltas/movers over time.
+            try:
+                cur = prod_conn.execute(
+                    "SELECT RecommendRate_pct, ReviewsCount, AvgStarRating, "
+                    "Price_CZK, Price_EUR FROM products WHERE ProductURL = ?",
+                    (url,),
+                ).fetchone()
+                if cur:
+                    record_snapshot(
+                        prod_conn, url, r["source"],
+                        {
+                            "RecommendRate_pct": cur[0],
+                            "ReviewsCount":      cur[1],
+                            "AvgStarRating":     cur[2],
+                            "Price_CZK":         cur[3],
+                            "Price_EUR":         cur[4],
+                        },
+                        country=r["country"],
+                    )
+            except Exception as _se:
+                import logging as _log
+                _log.warning(f"force_merge: snapshot failed for {url}: {_se}")
+
             users_conn.execute(
                 "UPDATE staging_products SET merged = 1 WHERE id = ?", (r["id"],)
             )

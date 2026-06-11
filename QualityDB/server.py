@@ -5293,41 +5293,6 @@ if __name__ == "__main__":
         except Exception as _e:
             print(f"[init] Scheduler not started: {_e}", flush=True)
 
-        # 6. Clean up fake Alza snapshot seeds (created from stale XLSX data).
-        #    The seed_days=7 seeding created synthetic history that shows "Stable 14d, 97%"
-        #    for all Alza products even though the data was never live-scraped.
-        #    Delete those snapshots so badges only appear once the live scraper has run.
-        def _cleanup_fake_alza_snapshots():
-            """Delete ALL alza.cz snapshots seeded from stale XLSX data.
-
-            The Alza data was bulk-imported from an XLSX file (not live-scraped),
-            so all existing alza.cz snapshots show fabricated 'Stable 14d' history.
-            Wipe them now — real snapshots will accumulate once alza_live_scraper.py
-            runs on Sunday and alza_snapshot.py records fresh values.
-
-            This runs every restart but is idempotent once snapshots are gone.
-            """
-            try:
-                import os as _os
-                snaps_path = _os.environ.get(
-                    "SNAPSHOTS_DB_PATH",
-                    _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-                )
-                if not _os.path.exists(snaps_path):
-                    return
-                import sqlite3 as _sq3
-                sc = _sq3.connect(snaps_path, timeout=30)
-                result = sc.execute("DELETE FROM product_snapshots WHERE source = 'alza.cz'")
-                n = result.rowcount
-                sc.commit()
-                sc.close()
-                if n:
-                    print(f"[init] removed {n} stale Alza snapshot rows — real history starts after live scraper runs", flush=True)
-            except Exception as _ce:
-                print(f"[init] alza snapshot cleanup skipped: {_ce}", flush=True)
-
-        threading.Thread(target=_cleanup_fake_alza_snapshots, daemon=True, name="alza-snap-cleanup").start()
-
         # 7a. Populate alza images instantly from SKU codes (no HTTP requests)
         def _run_alza_images():
             try:
