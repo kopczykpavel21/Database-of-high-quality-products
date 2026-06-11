@@ -23,6 +23,7 @@ import logging
 import sqlite3
 import os
 import sys
+from scraper.snapshots import ensure_snapshot_table, record_snapshot
 
 try:
     from curl_cffi import requests
@@ -38,17 +39,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "products.db")
 
 # ── Amazon-specific thresholds ───────────────────────────────────────────────
-MIN_STARS            = 4.0   # Minimum star rating (out of 5)
-MIN_REVIEWS          = 30    # Lowered — review-rank sort puts most-reviewed first anyway
-STOP_BELOW           = 3.8   # Stop scraping a category when stars drop below this
+MIN_STARS            = 0     # 0 = collect all ratings (full distribution)
+MIN_REVIEWS          = 10    # keep at 10 for reliability
+STOP_BELOW           = 0     # 0 = never stop early based on score
 MAX_PAGES            = 8     # Max pages per category (20 products/page on Amazon)
 REQUEST_DELAY        = 4.0   # Base seconds between page requests
 SESSION_REFRESH_EVERY = 5    # Refresh session cookies every N categories
 
 # ── Base URL builder ──────────────────────────────────────────────────────────
 # s=review-rank  → sorted by most reviews first (maximises high-review products)
-# rh=p_72:419122031 → filtered to 4+ stars
-_BASE = "https://www.amazon.de/s?s=review-rank&rh=p_72%3A419122031&k="
+# rh=p_72:419122031 was the 4+ star filter — removed so all ratings are collected
+_BASE = "https://www.amazon.de/s?s=review-rank&k="
 
 def _url(keyword: str) -> str:
     return _BASE + keyword.replace(" ", "+")
@@ -322,29 +323,36 @@ def load_existing_names(conn: sqlite3.Connection) -> set:
 
 
 def insert_products(conn: sqlite3.Connection, products: list, category: str) -> int:
+    ensure_snapshot_table(conn)
     existing = load_existing_names(conn)
     inserted = 0
     for p in products:
         key = p["Name"].lower()
-        if key in existing:
-            continue
-        conn.execute(
-            """INSERT INTO products
-               (Name, Category, ProductURL, AvgStarRating,
-                RecommendRate_pct, ReviewsCount, source)
-               VALUES (?,?,?,?,?,?,?)""",
-            (
-                p["Name"],
-                category,
-                p.get("ProductURL", ""),
-                p.get("AvgStarRating"),
-                p.get("RecommendRate_pct"),
-                p.get("ReviewsCount", 0),
-                "amazon",
+        url = p.get("ProductURL", "")
+
+        if key not in existing:
+            conn.execute(
+                """INSERT INTO products
+                   (Name, Category, ProductURL, AvgStarRating,
+                    RecommendRate_pct, ReviewsCount, source)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    p["Name"],
+                    category,
+                    url,
+                    p.get("AvgStarRating"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount", 0),
+                    "amazon",
+                )
             )
-        )
-        existing.add(key)
-        inserted += 1
+            existing.add(key)
+            inserted += 1
+
+        # Always record a snapshot — for both new AND existing products.
+        # This builds the longitudinal panel for trend/ODA analysis.
+        record_snapshot(conn, url, "amazon", p, country="US")
+
     conn.commit()
     return inserted
 

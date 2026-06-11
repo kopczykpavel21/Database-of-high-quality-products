@@ -1,6 +1,7 @@
 """
-Import high-quality products from the two new Alza Excel files into products.db.
-Filter: ReturnRate < average return rate of each file AND ReviewsCount >= 2.
+Import ALL Alza products from the two Excel files into products.db.
+Filter: ReviewsCount >= 10 only (no return rate filter — full distribution for research).
+Uses upsert so re-running updates prices/ratings on existing rows.
 Run from the QualityDB folder: python3 import_new_alza.py
 """
 import sqlite3, os, re
@@ -122,62 +123,69 @@ def read_file2(path) -> pd.DataFrame:
     df = df.drop_duplicates(subset='Name', keep='first')
     return df
 
-# ── filter & insert ───────────────────────────────────────────────────────────
+# ── upsert all ───────────────────────────────────────────────────────────────
 
-def filter_and_insert(df: pd.DataFrame, label: str, conn: sqlite3.Connection):
-    existing_names, existing_urls = load_existing(conn)
+MIN_REVIEWS = 10   # reliability floor — consistent with all other scrapers
 
-    avg_ret = df['ReturnRate_pct'].mean()
+def upsert_all(df: pd.DataFrame, label: str, conn: sqlite3.Connection):
+    """Insert new rows, update price/rating/return-rate on existing ones (by URL)."""
+    cur = conn.cursor()
+
+    qualified = df[df['ReviewsCount'] >= MIN_REVIEWS].copy()
     print(f"\n{label}")
     print(f"  Total rows:       {len(df)}")
-    print(f"  Avg return rate:  {avg_ret:.2f}%  (this is the threshold)")
+    print(f"  With ≥{MIN_REVIEWS} reviews:  {len(qualified)}")
 
-    qualified = df[
-        (df['ReturnRate_pct'] < avg_ret) &
-        (df['ReviewsCount'] >= 2)
-    ].copy()
-    print(f"  After filter:     {len(qualified)}")
-
-    inserted = 0
-    skipped  = 0
+    inserted = updated = skipped = 0
     for _, row in qualified.iterrows():
         name = str(row.get('Name', '') or '').strip()
         url  = str(row.get('ProductURL', '') or '').strip()
         if not name:
             continue
-        # Skip if already in DB (by name or URL)
-        if name.lower() in existing_names:
-            skipped += 1; continue
-        if url and url.lower() in existing_urls:
-            skipped += 1; continue
 
-        conn.execute(
-            """INSERT INTO products
-               (Name, Category, ProductURL, Price_CZK, AvgStarRating,
-                StarRatingsCount, ReviewsCount, RecommendRate_pct,
-                ReturnRate_pct, source)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (
-                name,
-                str(row.get('Category','Home Appliances')),
-                url or None,
-                row.get('Price_CZK') if pd.notna(row.get('Price_CZK')) else None,
-                row.get('AvgStarRating') if pd.notna(row.get('AvgStarRating')) else None,
-                clean_count(row.get('StarRatingsCount')),
-                int(row['ReviewsCount']) if pd.notna(row.get('ReviewsCount')) else None,
-                row.get('RecommendRate_pct') if pd.notna(row.get('RecommendRate_pct')) else None,
-                row.get('ReturnRate_pct'),
-                row.get('source', 'alza'),
-            )
+        existing = cur.execute(
+            "SELECT rowid FROM products WHERE ProductURL = ? LIMIT 1", (url,)
+        ).fetchone() if url else None
+
+        vals = (
+            str(row.get('Category', 'Home Appliances')),
+            row.get('Price_CZK') if pd.notna(row.get('Price_CZK')) else None,
+            row.get('AvgStarRating') if pd.notna(row.get('AvgStarRating')) else None,
+            clean_count(row.get('StarRatingsCount')),
+            int(row['ReviewsCount']) if pd.notna(row.get('ReviewsCount')) else None,
+            row.get('RecommendRate_pct') if pd.notna(row.get('RecommendRate_pct')) else None,
+            row.get('ReturnRate_pct') if pd.notna(row.get('ReturnRate_pct')) else None,
         )
-        existing_names.add(name.lower())
-        if url: existing_urls.add(url.lower())
-        inserted += 1
+
+        if existing:
+            cur.execute(
+                """UPDATE products SET
+                   Category=?, Price_CZK=?, AvgStarRating=?,
+                   StarRatingsCount=?, ReviewsCount=?,
+                   RecommendRate_pct=?, ReturnRate_pct=?
+                   WHERE ProductURL=?""",
+                (*vals, url)
+            )
+            updated += 1
+        else:
+            try:
+                cur.execute(
+                    """INSERT INTO products
+                       (Name, Category, ProductURL, Price_CZK, AvgStarRating,
+                        StarRatingsCount, ReviewsCount, RecommendRate_pct,
+                        ReturnRate_pct, source, country)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (name, vals[0], url or None, *vals[1:], 'alza', 'CZ')
+                )
+                inserted += 1
+            except Exception:
+                skipped += 1
 
     conn.commit()
     print(f"  Inserted:         {inserted}")
-    print(f"  Skipped (dup):    {skipped}")
-    return inserted
+    print(f"  Updated:          {updated}")
+    print(f"  Skipped (error):  {skipped}")
+    return inserted, updated
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -196,16 +204,16 @@ if __name__ == "__main__":
     conn = sqlite3.connect(DB_PATH)
 
     df1 = read_file1(FILE1)
-    total1 = filter_and_insert(df1, "File 1 — Fridges & Large Appliances", conn)
+    ins1, upd1 = upsert_all(df1, "File 1 — Fridges & Large Appliances", conn)
 
     df2 = read_file2(FILE2)
-    total2 = filter_and_insert(df2, "File 2 — Home Appliances (8 categories)", conn)
+    ins2, upd2 = upsert_all(df2, "File 2 — Home Appliances (8 categories)", conn)
 
-    after_total = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+    after_total = conn.execute("SELECT COUNT(*) FROM products WHERE source='alza'").fetchone()[0]
     conn.close()
 
     print()
     print("=" * 55)
-    print(f"Done! Added {total1 + total2} new products.")
-    print(f"Database: {before_total:,} → {after_total:,} total products.")
+    print(f"Done! Inserted {ins1+ins2}, updated {upd1+upd2} Alza products.")
+    print(f"Total Alza products in DB: {after_total:,}")
     print("=" * 55)

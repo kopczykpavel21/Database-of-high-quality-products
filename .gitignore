@@ -3,6 +3,14 @@ products.db
 products.db-wal
 products.db-shm
 
+# Deploy DB artifacts — built locally, shipped to the Fly volume, never in git
+*_deploy.db
+*_deploy.db-wal
+*_deploy.db-shm
+
+# Local backup folders
+QualityDB.bak_*/
+
 # HuggingFace download cache
 QualityDB/scraper/.hf_cache/
 .hf_cache/

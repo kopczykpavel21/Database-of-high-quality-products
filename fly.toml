@@ -4,21 +4,38 @@ primary_region = "ams"
 [build]
 
 [env]
-  DB_PATH = "/data/products.db"
+  DB_PATH            = "/data/products.db"
+  SNAPSHOTS_DB_PATH  = "/data/snapshots.db"
+  USERS_DB_PATH      = "/data/users.db"
+  # Fly's FUSE volume doesn't support WAL extra files — use DELETE journal mode
+  JOURNAL_MODE       = "delete"
+  # HTML cache TTL in seconds (5 min default)
+  HTML_TTL           = "300"
+  PORT               = "8080"
+  # Show Python output in fly logs immediately (no line-buffering delay)
+  PYTHONUNBUFFERED   = "1"
+
+# Secrets set via:  fly secrets set SCRAPER_KEY=<key> GOOGLE_CLIENT_ID=<id> ...
+# (never put real secrets in fly.toml — use fly secrets)
 
 [http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = "stop"
-  auto_start_machines = true
+  internal_port        = 8080
+  force_https          = true
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
   min_machines_running = 0
 
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
 [[vm]]
-  memory = "2gb"
+  memory   = "2gb"
   cpu_kind = "shared"
-  cpus = 1
+  cpus     = 1
 
 [[mounts]]
-  source = "qualitydb_data"
-  destination = "/data"
-  initial_size = "3gb"
+  source           = "qualitydb_data"
+  destination      = "/data"
+  initial_size     = "5gb"

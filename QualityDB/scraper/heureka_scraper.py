@@ -15,6 +15,7 @@ import logging
 import sqlite3
 import os
 import sys
+from scraper.snapshots import ensure_snapshot_table, record_snapshot
 
 try:
     from curl_cffi import requests
@@ -28,7 +29,7 @@ except ImportError:
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from scraper.config import (
     MIN_RATING_PCT, MIN_REVIEWS, STOP_BELOW_PCT,
-    REQUEST_DELAY, MAX_PAGES, CATEGORIES
+    REQUEST_DELAY, MAX_PAGES, CATEGORIES, RESEARCH_MODE
 )
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "products.db")
@@ -102,6 +103,31 @@ def warm_up_session(session) -> bool:
         return False
 
 
+def _is_valid_heureka_url(url: str) -> bool:
+    """
+    Return True only for genuine Heureka product page URLs.
+
+    Filters out two kinds of tracking/redirect junk Heureka sometimes
+    injects into listing pages:
+
+    1. Relative click-tracking paths like:
+         /exit-click-web?bb=0&cs=4&et=eyJhbGci…
+       These are session-scoped redirects — not stable product URLs.
+
+    2. Anonymous hashed-domain click trackers like:
+         https://3b03526a0dbc2e6018e63348d8d47352.heureka.cz/0/74512.click?…
+       Real product URLs never contain ".click?" and never use that hash subdomain.
+    """
+    if not url or not url.startswith("http"):
+        return False
+    if ".click?" in url or ".click?" in url.lower():
+        return False
+    # The hashed subdomain (32-char hex) is Heureka's internal click tracker
+    if re.search(r"[0-9a-f]{32}\.heureka\.", url):
+        return False
+    return True
+
+
 def scrape_page(url: str, session) -> list:
     """
     Fetch one Heureka listing page and return a list of product dicts.
@@ -121,6 +147,7 @@ def scrape_page(url: str, session) -> list:
         return []
 
     products = []
+    skipped_tracking = 0
     for card in cards:
         # Name & URL
         name_el = card.select_one(".c-product__link")
@@ -129,6 +156,12 @@ def scrape_page(url: str, session) -> list:
         name = name_el.get_text(strip=True)
         overlay = card.select_one(".c-product__overlay-link")
         product_url = name_el.get("href") or (overlay.get("href") if overlay else "")
+
+        # Skip Heureka click-tracking redirect URLs — they are session-scoped
+        # and useless as persistent product identifiers.
+        if not _is_valid_heureka_url(product_url):
+            skipped_tracking += 1
+            continue
 
         # Rating %
         rating_el = card.select_one(".c-rating-widget__value")
@@ -154,6 +187,8 @@ def scrape_page(url: str, session) -> list:
             "Price_CZK":         price,
         })
 
+    if skipped_tracking:
+        log.debug(f"  Skipped {skipped_tracking} click-tracking redirect URLs on {url}")
     return products
 
 
@@ -165,29 +200,36 @@ def load_existing_names(conn: sqlite3.Connection) -> set:
 
 
 def insert_products(conn: sqlite3.Connection, products: list, category: str) -> int:
+    ensure_snapshot_table(conn)
     existing = load_existing_names(conn)
     inserted = 0
     for p in products:
         key = p["Name"].lower()
-        if key in existing:
-            continue
-        conn.execute(
-            """INSERT INTO products
-               (Name, Category, ProductURL, Price_CZK,
-                RecommendRate_pct, ReviewsCount, source)
-               VALUES (?,?,?,?,?,?,?)""",
-            (
-                p["Name"],
-                category,
-                p.get("ProductURL", ""),
-                p.get("Price_CZK"),
-                p.get("RecommendRate_pct"),
-                p.get("ReviewsCount", 0),
-                "heureka",
+        url = p.get("ProductURL", "")
+
+        if key not in existing:
+            conn.execute(
+                """INSERT INTO products
+                   (Name, Category, ProductURL, Price_CZK,
+                    RecommendRate_pct, ReviewsCount, source)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (
+                    p["Name"],
+                    category,
+                    url,
+                    p.get("Price_CZK"),
+                    p.get("RecommendRate_pct"),
+                    p.get("ReviewsCount", 0),
+                    "heureka",
+                )
             )
-        )
-        existing.add(key)
-        inserted += 1
+            existing.add(key)
+            inserted += 1
+
+        # Always record a snapshot — for both new AND existing products.
+        # This builds the longitudinal panel for trend/ODA analysis.
+        record_snapshot(conn, url, "heureka", p, country="CZ")
+
     conn.commit()
     return inserted
 
@@ -212,11 +254,16 @@ def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> int:
             log.info("   No products returned — stopping.")
             break
 
-        qualified = [
-            p for p in products
-            if (p["RecommendRate_pct"] or 0) >= MIN_RATING_PCT
-            and p["ReviewsCount"] >= MIN_REVIEWS
-        ]
+        if RESEARCH_MODE:
+            # Research mode: collect everything — no quality filter.
+            # Needed for full-market analysis (planned/premature obsolescence).
+            qualified = products
+        else:
+            qualified = [
+                p for p in products
+                if (p["RecommendRate_pct"] or 0) >= MIN_RATING_PCT
+                and p["ReviewsCount"] >= MIN_REVIEWS
+            ]
 
         # Only consider rated products for the stop check — unrated ones (None)
         # would falsely trigger an early stop if counted as 0
@@ -226,11 +273,13 @@ def scrape_category(cat: dict, session, conn: sqlite3.Connection) -> int:
         added = insert_products(conn, qualified, cat_name)
         total_added += added
         log.info(
-            f"   Found {len(products)} | Qualified: {len(qualified)} | "
-            f"New in DB: {added} | Lowest rating: {lowest_on_page}%"
+            f"   Found {len(products)} | Collected: {len(qualified)} | "
+            f"New in DB: {added} | Lowest rating: {lowest_on_page}% "
+            f"{'[RESEARCH MODE]' if RESEARCH_MODE else ''}"
         )
 
-        if lowest_on_page < STOP_BELOW_PCT:
+        # Early stop only applies outside research mode
+        if not RESEARCH_MODE and lowest_on_page < STOP_BELOW_PCT:
             log.info(f"   Rating dropped to {lowest_on_page}% — stopping early.")
             break
 

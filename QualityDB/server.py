@@ -16,6 +16,7 @@ Scraping:
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import sqlite3, json, os, math, urllib.parse, mimetypes, subprocess, sys
 import time, datetime, threading
+import logging
 
 # Support DB on a mounted volume (e.g. Fly.io) via env var, fallback to local
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "products.db"))

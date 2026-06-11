@@ -7,6 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css" />
+  <!-- ↓ Set your Fly.io API URL here before deploying to Cloudflare Pages ↓ -->
+  <script>
+    window.__API_BASE  = "https://YOUR-APP-NAME.fly.dev";
+    window.__IR_SCORES = {};   // fetched async from /api/ir-data on first use
+    window.__FR_GOV    = [];
+  </script>
 </head>
 <body>
 
@@ -17,9 +23,10 @@
       <span class="logo-icon">✦</span>
       <span class="logo-text">QualityDB</span>
     </div>
+
     <div class="header-stats" id="header-stats">
-      <span class="stat-pill"><span id="stat-total">—</span> products</span>
-      <span class="stat-pill">⭐ <span id="stat-stars">—</span> avg</span>
+      <span class="stat-pill"><span id="stat-total">—</span> <span data-i18n="statProducts">products</span></span>
+      <span class="stat-pill">⭐ <span id="stat-stars">—</span> <span data-i18n="statAvg">avg</span></span>
     </div>
   </div>
 </header>
@@ -29,7 +36,8 @@
   <div class="search-wrap">
     <div class="search-box">
       <span class="search-icon">🔍</span>
-      <input type="text" id="search-input" placeholder="Search products, brands, descriptions…" autocomplete="off" />
+      <input type="text" id="search-input" data-i18n-placeholder="searchPlaceholder"
+             placeholder="Search products, brands, descriptions…" autocomplete="off" />
       <button class="search-clear" id="search-clear" title="Clear">✕</button>
     </div>
   </div>
@@ -37,7 +45,7 @@
 
 <!-- MOBILE FILTER TOGGLE -->
 <button class="mobile-filter-btn" id="mobile-filter-btn">
-  <span>⚙</span> Filters
+  <span>⚙</span> <span data-i18n="mobileFilters">Filters</span>
 </button>
 
 <!-- SIDEBAR BACKDROP (mobile) -->
@@ -49,34 +57,32 @@
   <!-- SIDEBAR FILTERS -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <h2>Filters</h2>
+      <h2 data-i18n="filtersTitle">Filters</h2>
       <div style="display:flex;gap:8px;align-items:center;">
-        <button class="reset-btn" id="reset-filters">Reset all</button>
+        <button class="reset-btn" id="reset-filters" data-i18n="resetAll">Reset all</button>
         <button class="sidebar-close-btn" id="sidebar-close">✕</button>
       </div>
     </div>
 
     <!-- Main Category -->
     <div class="filter-group">
-      <label class="filter-label">Category</label>
+      <label class="filter-label" data-i18n="category">Category</label>
       <select id="filter-main-category" class="filter-select">
-        <option value="">All categories</option>
-        <!-- populated by JS via /api/categories -->
+        <option value="" data-i18n-opt="allCategories">All categories</option>
       </select>
     </div>
 
-    <!-- Subcategory (shown only when a main category is selected) -->
+    <!-- Subcategory -->
     <div class="filter-group" id="sub-category-group" style="display:none;">
-      <label class="filter-label">Subcategory</label>
+      <label class="filter-label" data-i18n="subcategory">Subcategory</label>
       <select id="filter-category" class="filter-select">
-        <option value="">All subcategories</option>
-        <!-- populated by JS based on main category selection -->
+        <option value="" data-i18n-opt="allSubcategories">All subcategories</option>
       </select>
     </div>
 
     <!-- Min Stars -->
     <div class="filter-group">
-      <label class="filter-label">Min star rating</label>
+      <label class="filter-label" data-i18n="minStarRating">Min star rating</label>
       <div class="range-row">
         <input type="range" id="filter-stars" min="0" max="5" step="0.1" value="0" />
         <span class="range-value" id="stars-val">Any</span>
@@ -90,7 +96,7 @@
 
     <!-- Max Return Rate -->
     <div class="filter-group">
-      <label class="filter-label">Max return rate</label>
+      <label class="filter-label" data-i18n="maxReturnRate">Max return rate</label>
       <div class="range-row">
         <input type="range" id="filter-return" min="0" max="1.4" step="0.1" value="1.4" />
         <span class="range-value" id="return-val">1.4%</span>
@@ -104,7 +110,7 @@
 
     <!-- Min Reviews -->
     <div class="filter-group">
-      <label class="filter-label">Min reviews</label>
+      <label class="filter-label" data-i18n="minReviews">Min reviews</label>
       <div class="range-row">
         <input type="range" id="filter-reviews" min="0" max="500" step="5" value="0" />
         <span class="range-value" id="reviews-val">Any</span>
@@ -112,8 +118,8 @@
     </div>
 
     <!-- Min Recommend Rate -->
-    <div class="filter-group">
-      <label class="filter-label">Min recommend rate</label>
+    <div class="filter-group" id="recommend-filter-group">
+      <label class="filter-label" data-i18n="minRecommend">Min recommend rate</label>
       <div class="range-row">
         <input type="range" id="filter-recommend" min="0" max="100" step="1" value="0" />
         <span class="range-value" id="recommend-val">Any</span>
@@ -122,42 +128,55 @@
 
     <!-- Source -->
     <div class="filter-group">
-      <label class="filter-label">Source</label>
+      <label class="filter-label" data-i18n="source">Source</label>
       <select id="filter-source" class="filter-select">
-        <option value="">All sources (CZ)</option>
+        <option value="">All sources</option>
         <optgroup label="🇨🇿 Czech Republic">
-          <option value="alza">Alza.cz</option>
-          <option value="heureka">Heureka.cz</option>
-          <option value="zbozi">Zbozi.cz</option>
-          <option value="dtest">D-test.cz</option>
-          <option value="datart">Datart.cz</option>
+          <option value="alza"      data-market="CZ">Alza.cz</option>
+          <option value="heureka"   data-market="CZ">Heureka.cz</option>
+          <option value="zbozi"     data-market="CZ">Zbozi.cz</option>
+          <option value="dtest"     data-market="CZ">D-test.cz</option>
+          <option value="datart"    data-market="CZ">Datart.cz</option>
         </optgroup>
         <optgroup label="🇸🇰 Slovakia">
-          <option value="heureka_sk">Heureka.sk</option>
+          <option value="heureka_sk" data-market="SK">Heureka.sk</option>
         </optgroup>
         <optgroup label="🇩🇪 Germany">
-          <option value="warentest">Stiftung Warentest</option>
-          <option value="otto">Otto.de</option>
-          <option value="amazon">Amazon.de</option>
-          <option value="conrad">Conrad.de</option>
+          <option value="warentest" data-market="DE">Stiftung Warentest</option>
+          <option value="otto"      data-market="DE">Otto.de</option>
+          <option value="amazon"    data-market="DE">Amazon.de</option>
+          <option value="conrad"    data-market="DE">Conrad.de</option>
         </optgroup>
         <optgroup label="🇫🇷 France">
-          <option value="fnac">Fnac.fr</option>
+          <option value="fnac"      data-market="FR">Fnac.fr</option>
+          <option value="fr_ir"     data-market="FR">Indice de Réparabilité (Gov)</option>
         </optgroup>
         <optgroup label="🇵🇱 Poland">
-          <option value="ceneo">Ceneo.pl</option>
+          <option value="ceneo"     data-market="PL">Ceneo.pl</option>
         </optgroup>
-        <optgroup label="🇺🇸 United States">
-          <option value="amazon_us">Amazon.com (US)</option>
+        <optgroup label="🌐 Global">
+          <option value="amazon_us" data-market="US">Amazon.com (US)</option>
         </optgroup>
       </select>
     </div>
 
     <!-- Quality keywords -->
     <div class="filter-group">
-      <label class="filter-label">Quality signals</label>
-      <div class="kw-filter-pills" id="kw-filter-pills">
-        <!-- populated by JS -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="filter-label" style="margin-bottom:0" data-i18n="qualitySignals">Quality signals</label>
+        <button id="kw-clear-btn" class="kw-clear-btn" style="display:none" title="Clear filter">✕ Clear</button>
+      </div>
+      <div class="kw-filter-pills" id="kw-filter-pills"></div>
+    </div>
+
+    <!-- Products to avoid -->
+    <div class="filter-group">
+      <label class="filter-label">⚠️ Problematic products</label>
+      <button id="avoid-toggle" class="avoid-btn" data-active="0">
+        Show products to avoid
+      </button>
+      <div id="avoid-info" class="avoid-info" style="display:none">
+        Showing products rated &lt;3.5★ or &lt;65% recommend with 100+ reviews
       </div>
     </div>
   </aside>
@@ -169,15 +188,9 @@
     <div class="toolbar">
       <div class="results-info" id="results-info">Loading…</div>
       <div class="toolbar-right">
-        <label class="sort-label">Sort by</label>
+        <label class="sort-label" data-i18n="sortBy">Sort by</label>
         <select id="sort-by" class="filter-select sort-select">
-          <option value="ReturnRate_pct">Return rate ↑</option>
-          <option value="AvgStarRating_desc">Stars ↓</option>
-          <option value="RecommendRate_pct_desc">Recommend % ↓</option>
-          <option value="ReviewsCount_desc">Most reviews</option>
-          <option value="Price_CZK">Price ↑</option>
-          <option value="Price_CZK_desc">Price ↓</option>
-          <option value="Name">Name A–Z</option>
+          <!-- populated by buildSortOptions() on load and language change -->
         </select>
         <div class="view-toggle">
           <button class="view-btn active" id="view-grid" title="Grid view">⊞</button>
@@ -190,7 +203,7 @@
     <div class="product-grid" id="product-grid">
       <div class="loading-state">
         <div class="spinner"></div>
-        <p>Loading products…</p>
+        <p data-i18n="loading">Loading products…</p>
       </div>
     </div>
 
