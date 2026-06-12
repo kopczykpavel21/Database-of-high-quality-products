@@ -60,7 +60,7 @@ def harvest_tokens(sess) -> tuple[str, str] | None:
             m = re.search(r'reviewStats\?country=CZ&pgrik=([^&"\s]+)&ucik=([^&"\s]+)', txt)
             if m:
                 return m.group(1), m.group(2)
-            return None
+            # 200 but token markup missing (intermittent anti-bot page) — retry
         time.sleep(20)
     return None
 
