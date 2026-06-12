@@ -3972,7 +3972,15 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 updates = body.get("updates", [])
                 _c = open_db()
-                applied = 0; notfound = 0; empty = 0
+                applied = 0; notfound = 0; empty = 0; snapped = 0
+                # Record a real price-history snapshot for each updated product
+                # (one row per product/source/day — see scraper/snapshots.py).
+                try:
+                    from scraper.snapshots import ensure_snapshot_table, record_snapshot
+                    ensure_snapshot_table(_c)
+                    _snap_ok = True
+                except Exception:
+                    _snap_ok = False
                 for u in updates:
                     url = (u.get("ProductURL") or "").strip()
                     if not url:
@@ -3992,13 +4000,26 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     if res.rowcount:
                         applied += res.rowcount
+                        if _snap_ok:
+                            try:
+                                _row = _c.execute(
+                                    "SELECT source, country FROM products WHERE ProductURL = ?",
+                                    (url,),
+                                ).fetchone()
+                                if _row:
+                                    record_snapshot(_c, url, _row[0] or "", u,
+                                                    country=_row[1] or "")
+                                    snapped += 1
+                            except Exception:
+                                pass
                     else:
                         notfound += 1
                 _c.commit(); _c.close()
                 global _stats_cache, _stats_ts
                 _stats_cache = None; _stats_ts = 0.0
                 self.send_json({"ok": True, "applied": applied,
-                                "notfound": notfound, "empty": empty})
+                                "notfound": notfound, "empty": empty,
+                                "snapshots": snapped})
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
