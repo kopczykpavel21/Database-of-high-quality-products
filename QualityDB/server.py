@@ -2441,7 +2441,7 @@ def query_product_history(product_url: str) -> list:
         _norm = product_url.lower().rstrip("/")
         rows = sc.execute("""
             SELECT snapshot_date, recommend_pct, review_count,
-                   avg_star_rating, price_czk, price_eur
+                   avg_star_rating, price_czk, price_eur, return_pct
             FROM   product_snapshots
             WHERE  LOWER(RTRIM(product_url, '/')) = ?
             ORDER  BY snapshot_date ASC
