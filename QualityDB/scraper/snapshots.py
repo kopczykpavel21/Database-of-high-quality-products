@@ -75,6 +75,9 @@ def _create_table(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_snap_source_date
             ON product_snapshots(source, snapshot_date);
     """)
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(product_snapshots)").fetchall()]
+    if "return_pct" not in cols:
+        conn.execute("ALTER TABLE product_snapshots ADD COLUMN return_pct REAL")
     conn.commit()
 
 
@@ -117,11 +120,11 @@ def record_snapshot(
             INSERT OR IGNORE INTO product_snapshots
                 (product_url, source, country, snapshot_date,
                  recommend_pct, review_count, avg_star_rating,
-                 price_czk, price_eur)
+                 price_czk, price_eur, return_pct)
             VALUES
                 (?, ?, ?, date('now'),
                  ?, ?, ?,
-                 ?, ?)
+                 ?, ?, ?)
             """,
             (
                 product_url,
@@ -132,11 +135,57 @@ def record_snapshot(
                 product.get("AvgStarRating"),
                 product.get("Price_CZK"),
                 product.get("Price_EUR"),
+                product.get("ReturnRate_pct"),
             ),
         )
         sc.commit()
     except sqlite3.Error as e:
         log.warning(f"[snapshots] Failed to record snapshot for {product_url}: {e}")
+
+
+def record_historical_snapshot(
+    product_url: str,
+    source: str,
+    snapshot_date: str,
+    country: str = "",
+    recommend_pct: Optional[float] = None,
+    review_count: Optional[int] = None,
+    avg_star_rating: Optional[float] = None,
+    price_czk: Optional[float] = None,
+    price_eur: Optional[float] = None,
+    return_pct: Optional[float] = None,
+) -> bool:
+    """
+    Insert one snapshot row for an explicit past date (e.g. from real
+    archival/panel data), instead of the date('now') used by record_snapshot().
+
+    Returns True if a new row was inserted, False if it already existed
+    (UNIQUE product_url+source+snapshot_date) or on error.
+    """
+    if not product_url or not snapshot_date:
+        return False
+
+    sc = _get_snap_conn()
+    try:
+        cur = sc.execute(
+            """
+            INSERT OR IGNORE INTO product_snapshots
+                (product_url, source, country, snapshot_date,
+                 recommend_pct, review_count, avg_star_rating,
+                 price_czk, price_eur, return_pct)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                product_url, source, country, snapshot_date,
+                recommend_pct, review_count, avg_star_rating,
+                price_czk, price_eur, return_pct,
+            ),
+        )
+        sc.commit()
+        return cur.rowcount > 0
+    except sqlite3.Error as e:
+        log.warning(f"[snapshots] Failed historical snapshot for {product_url}@{snapshot_date}: {e}")
+        return False
 
 
 def get_history(conn: sqlite3.Connection, product_url: str) -> list:
@@ -153,7 +202,7 @@ def get_history(conn: sqlite3.Connection, product_url: str) -> list:
     rows = sc.execute(
         """
         SELECT snapshot_date, recommend_pct, review_count,
-               avg_star_rating, price_czk, price_eur
+               avg_star_rating, price_czk, price_eur, return_pct
         FROM   product_snapshots
         WHERE  product_url = ?
         ORDER  BY snapshot_date ASC

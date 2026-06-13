@@ -4023,6 +4023,42 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
+        elif path == "/api/admin/load-historical-snapshots":
+            # Load real, pre-existing historical data points (e.g. from an
+            # earlier research panel) as snapshot rows for explicit past dates.
+            # Body: {"snapshots": [{"product_url":..., "source":..., "country":...,
+            #                       "snapshot_date": "YYYY-MM-DD",
+            #                       "avg_star_rating":..., "review_count":...,
+            #                       "recommend_pct":..., "price_czk":..., "return_pct":...}, ...]}
+            try:
+                snaps = body.get("snapshots", [])
+                from scraper.snapshots import ensure_snapshot_table, record_historical_snapshot
+                ensure_snapshot_table(None)
+                inserted = 0; skipped = 0
+                for s in snaps:
+                    url = (s.get("product_url") or "").strip()
+                    date = (s.get("snapshot_date") or "").strip()
+                    if not url or not date:
+                        skipped += 1; continue
+                    ok = record_historical_snapshot(
+                        url, s.get("source", ""), date,
+                        country=s.get("country", ""),
+                        recommend_pct=s.get("recommend_pct"),
+                        review_count=s.get("review_count"),
+                        avg_star_rating=s.get("avg_star_rating"),
+                        price_czk=s.get("price_czk"),
+                        price_eur=s.get("price_eur"),
+                        return_pct=s.get("return_pct"),
+                    )
+                    if ok:
+                        inserted += 1
+                    else:
+                        skipped += 1
+                self.send_json({"ok": True, "received": len(snaps),
+                                "inserted": inserted, "skipped": skipped})
+            except Exception as e:
+                self.send_json({"ok": False, "error": str(e)}, status=500)
+
         elif path == "/api/admin/test-alza":
             # Diagnostic: synchronously fetch ONE Alza URL and report what came back
             try:
