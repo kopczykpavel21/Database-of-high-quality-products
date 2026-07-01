@@ -101,6 +101,9 @@ def ensure_indexes(conn):
         ("NormalizedMainGroup", "TEXT"),
         ("first_seen_at",       "TEXT"),   # Set once on first INSERT; never updated
         ("qt_brand_score",      "REAL"),   # Brand avg score from expert tests (institutkvality)
+        ("country",             "TEXT"),   # Referenced by idx_country below
+        ("Price_EUR",           "REAL"),   # Referenced by idx_price_eur below
+        ("scraped_at",          "TEXT"),   # Referenced by idx_scraped_at below
     ]:
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE products ADD COLUMN {col} {typedef}")
