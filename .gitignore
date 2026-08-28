@@ -2,6 +2,14 @@
 products.db
 products.db-wal
 products.db-shm
+snapshots.db
+snapshots.db-wal
+snapshots.db-shm
+
+# User accounts — auth records, never publish to a remote
+users.db
+users.db-wal
+users.db-shm
 
 # Deploy DB artifacts — built locally, shipped to the Fly volume, never in git
 *_deploy.db

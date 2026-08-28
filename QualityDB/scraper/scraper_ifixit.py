@@ -13,6 +13,8 @@ Score format in guide steps: "Repairability Score: '''7 out of 10'''"
 or: "Repairability: 7 out of 10"
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 import time

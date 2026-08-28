@@ -15,6 +15,8 @@ category/badge/filter pages.
 Note: site redirects http→https and no-www→www. Use www.buyitforlifeproducts.com.
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 import time

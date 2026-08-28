@@ -12,6 +12,8 @@ data or an API endpoint becomes available.
 Previously: product name, brand, score, category, Reddit mention count.
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 import time

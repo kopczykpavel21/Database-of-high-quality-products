@@ -20,6 +20,28 @@ import logging
 
 # Support DB on a mounted volume (e.g. Fly.io) via env var, fallback to local
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "products.db"))
+
+def snapshots_db_path() -> str:
+    """Resolve the price-history DB.  Priority:
+         1. SNAPSHOTS_DB_PATH env var (explicit wins, even if the file is absent)
+         2. snapshots.db next to DB_PATH — keeps the pair together when DB_PATH
+            points at a data root outside the source tree (e.g. ~/QualityData)
+         3. snapshots.db next to server.py (historical default)
+
+    Every price-history feature (history strips, /api/snapshot-deltas,
+    /api/snapshot-movers, the has_history and price_drop filters) silently
+    degrades to "no data" when this file is missing, so resolution is logged
+    once at startup rather than failing quietly.
+    """
+    env = os.environ.get("SNAPSHOTS_DB_PATH")
+    if env:
+        return os.path.abspath(env)
+    beside_db = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "snapshots.db")
+    if os.path.exists(beside_db):
+        return beside_db
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "snapshots.db"))
+
+
 STATIC  = os.path.join(os.path.dirname(__file__), "static")
 TMPL    = os.path.join(os.path.dirname(__file__), "templates", "index.html")
 PAGE_SIZE = 24
@@ -1558,12 +1580,8 @@ def query_products(params):
     conn = open_db()
     # Attach snapshots DB when the has_history filter is active
     if has_history == "1":
-        import os as _os
-        _snaps_path = _os.environ.get(
-            "SNAPSHOTS_DB_PATH",
-            _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-        )
-        if _os.path.exists(_snaps_path):
+        _snaps_path = snapshots_db_path()
+        if os.path.exists(_snaps_path):
             conn.execute(f"ATTACH DATABASE '{_snaps_path}' AS snapshots")
         else:
             # Snapshots DB not found; make the subquery return nothing
@@ -1788,12 +1806,8 @@ def query_snapshot_movers(days: int = 7, limit: int = 40, metric: str = "recomme
     if cache_key in _movers_cache and (now_m - _movers_ts.get(cache_key, 0)) < MOVERS_TTL:
         return _movers_cache[cache_key]
 
-    import os as _os
-    _snaps_path = _os.environ.get(
-        "SNAPSHOTS_DB_PATH",
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-    )
-    if not _os.path.exists(_snaps_path):
+    _snaps_path = snapshots_db_path()
+    if not os.path.exists(_snaps_path):
         return {"risers": [], "fallers": [], "error": "snapshots.db not found"}
 
     try:
@@ -1929,7 +1943,6 @@ def query_snapshot_coverage() -> list:
     Also populates _snapshot_coverage_days with per-URL tracking duration.
     Result is cached in-memory for 10 min to avoid scanning 100k rows.
     """
-    import os as _os
     import time as _time
     global _snapshot_coverage_cache, _snapshot_coverage_set, _snapshot_coverage_days, _snapshot_coverage_ts
 
@@ -1937,11 +1950,8 @@ def query_snapshot_coverage() -> list:
     if _snapshot_coverage_cache is not None and (now - _snapshot_coverage_ts) < _SNAPSHOT_COVERAGE_TTL:
         return _snapshot_coverage_cache
 
-    _snaps_path = _os.environ.get(
-        "SNAPSHOTS_DB_PATH",
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-    )
-    if not _os.path.exists(_snaps_path):
+    _snaps_path = snapshots_db_path()
+    if not os.path.exists(_snaps_path):
         return []
     try:
         sc = sqlite3.connect(_snaps_path, timeout=20)
@@ -2454,12 +2464,8 @@ def query_snapshot_deltas() -> dict:
     if _delta_cache["data"] is not None and (now - _delta_cache["ts"]) < DELTA_TTL:
         return _delta_cache["data"]
 
-    import os as _os
-    _snaps_path = _os.environ.get(
-        "SNAPSHOTS_DB_PATH",
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-    )
-    if not _os.path.exists(_snaps_path):
+    _snaps_path = snapshots_db_path()
+    if not os.path.exists(_snaps_path):
         return {}
     try:
         sc = sqlite3.connect(_snaps_path, timeout=20)
@@ -2533,21 +2539,24 @@ def query_snapshot_deltas() -> dict:
 
 def query_product_history(product_url: str) -> list:
     """Return full snapshot history for one product URL, oldest first."""
-    import os as _os
-    _snaps_path = _os.environ.get(
-        "SNAPSHOTS_DB_PATH",
-        _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "snapshots.db"))
-    )
-    if not _os.path.exists(_snaps_path):
+    _snaps_path = snapshots_db_path()
+    if not os.path.exists(_snaps_path):
         return []
     try:
         sc = sqlite3.connect(_snaps_path, timeout=20)
         sc.row_factory = sqlite3.Row
+        # return_pct was added to the snapshot schema later (scraper/snapshots.py
+        # migrates it on write).  A snapshots.db last written by an older scraper
+        # still lacks the column, and selecting it unconditionally raised
+        # "no such column: return_pct" — which this function swallowed, so every
+        # product's history chart came back empty.  Probe the schema instead.
+        _cols = {r[1] for r in sc.execute("PRAGMA table_info(product_snapshots)")}
+        _ret = "return_pct" if "return_pct" in _cols else "NULL AS return_pct"
         # Normalise for matching: lowercase + strip trailing slash
         _norm = product_url.lower().rstrip("/")
-        rows = sc.execute("""
+        rows = sc.execute(f"""
             SELECT snapshot_date, recommend_pct, review_count,
-                   avg_star_rating, price_czk, price_eur, return_pct
+                   avg_star_rating, price_czk, price_eur, {_ret}
             FROM   product_snapshots
             WHERE  LOWER(RTRIM(product_url, '/')) = ?
             ORDER  BY snapshot_date ASC
@@ -4682,6 +4691,26 @@ if __name__ == "__main__":
         if not os.path.exists(DB_PATH):
             print(f"[init] No DB at {DB_PATH} — waiting for upload.", flush=True)
             return  # nothing more to do; server still accepts HTTP requests
+
+        # 1b. Report where price history is being read from.  A missing
+        #     snapshots DB is not fatal — but it silently empties the history
+        #     strips and the has_history / price_drop filters, which looks like
+        #     a UI bug rather than a misconfigured path.  Say so at boot.
+        _sp = snapshots_db_path()
+        if os.path.exists(_sp):
+            try:
+                _sc = sqlite3.connect(_sp, timeout=10)
+                _rows, _last = _sc.execute(
+                    "SELECT COUNT(*), MAX(snapshot_date) FROM product_snapshots"
+                ).fetchone()
+                _sc.close()
+                print(f"[init] Snapshots: {_sp} ({_rows:,} rows, latest {_last})", flush=True)
+            except Exception as _se:
+                print(f"[init] Snapshots: {_sp} — unreadable: {_se}", flush=True)
+        else:
+            print(f"[init] WARNING: no snapshots DB at {_sp} — price history, "
+                  f"price-drop and has-history filters will return nothing. "
+                  f"Set SNAPSHOTS_DB_PATH.", flush=True)
 
         # 1a. (REMOVED 2026-06-11) A boot-time wipe used to run here:
         #     DELETE FROM product_snapshots WHERE source = 'alza.cz'

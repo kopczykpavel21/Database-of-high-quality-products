@@ -12,6 +12,8 @@ Normalization: score_normalized = max(0, 100 - service_rate_pct * 5)
 Known report URLs (update annually):
 """
 
+from __future__ import annotations
+
 import hashlib
 import re
 import time

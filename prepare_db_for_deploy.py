@@ -18,16 +18,15 @@ import shutil
 import os
 import sys
 
-RICH_DIR = os.path.expanduser(
-    "~/Library/Application Support/Claude/local-agent-mode-sessions"
-    "/1e1ac800-a63c-47d9-89ad-44674a500c08"
-    "/85ed2075-7ffb-4a89-b8b5-3099a889ca38"
-    "/local_ef81bff6-0b9b-46de-b99f-65912eb2d078"
-    "/outputs/qualitydb-main/QualityDB"
-)
+# Canonical data root.  This used to point at a Claude local-agent-mode session
+# sandbox under ~/Library/Application Support — a disposable temp folder that
+# happened to hold the only current copy of the data.  Both databases now live
+# in ~/QualityData/qualitydb, which is also what the server and the scheduler
+# read (DB_PATH / SNAPSHOTS_DB_PATH).
+DATA_ROOT = os.path.expanduser(os.environ.get("QUALITYDB_DATA_ROOT", "~/QualityData/qualitydb"))
 
-SRC_DB  = os.path.join(RICH_DIR, "products.db")
-SRC_SNP = os.path.join(RICH_DIR, "snapshots.db")
+SRC_DB  = os.environ.get("DB_PATH")           or os.path.join(DATA_ROOT, "products.db")
+SRC_SNP = os.environ.get("SNAPSHOTS_DB_PATH") or os.path.join(DATA_ROOT, "snapshots.db")
 OUT_DB  = os.path.join(os.path.dirname(__file__), "products_deploy.db")
 OUT_SNP = os.path.join(os.path.dirname(__file__), "snapshots_deploy.db")
 
@@ -115,11 +114,23 @@ def main():
     print(f"  Products kept: {total_after:,}  (removed {total_before - total_after:,})")
     print(f"  Output size:   {out_size:.0f} MB")
 
-    # Copy snapshots DB
+    # Copy snapshots DB.  Without this the deployed site loses every price
+    # history strip and the has_history / price_drop filters return nothing,
+    # so a missing source file is an error, not something to skip quietly.
     if os.path.exists(SRC_SNP):
         shutil.copy2(SRC_SNP, OUT_SNP)
         snp_size = os.path.getsize(OUT_SNP) / 1024**2
-        print(f"\nSnapshots DB copied → {OUT_SNP}  ({snp_size:.0f} MB)")
+        _sc = sqlite3.connect(OUT_SNP)
+        _rows, _last = _sc.execute(
+            "SELECT COUNT(*), MAX(snapshot_date) FROM product_snapshots").fetchone()
+        _sc.close()
+        print(f"\nSnapshots DB copied → {OUT_SNP}  ({snp_size:.0f} MB, "
+              f"{_rows:,} rows, latest {_last})")
+    else:
+        print(f"\nERROR: no snapshots DB at {SRC_SNP} — price history would be "
+              f"empty on the deployed site.  Set SNAPSHOTS_DB_PATH or "
+              f"QUALITYDB_DATA_ROOT and re-run.")
+        sys.exit(1)
 
     print(f"""
 Done! Upload to Fly.io with:

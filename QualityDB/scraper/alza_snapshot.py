@@ -10,6 +10,8 @@ Run via scheduler (daily) or directly:
     python3 -m scraper.alza_snapshot
 """
 
+from __future__ import annotations
+
 import os
 import sqlite3
 import logging
@@ -17,7 +19,11 @@ from datetime import date, timedelta
 
 log = logging.getLogger(__name__)
 
-SOURCE = "alza.cz"
+# products.db labels these rows "alza", and every other source writes its
+# snapshots under the same bare label it uses in products.db (coolblue,
+# heureka, amazon_de, …).  "alza.cz" matched nothing, so this task wrote
+# zero rows on every run and Alza products never gained price history.
+SOURCE = "alza"
 COUNTRY = "CZ"
 
 
@@ -58,13 +64,13 @@ def run_alza_snapshot(db_path: str | None = None, seed_days: int = 0) -> int:
         SELECT ProductURL, RecommendRate_pct, ReviewsCount,
                AvgStarRating, Price_CZK, Price_EUR
         FROM   products
-        WHERE  source = 'alza.cz'
+        WHERE  source = ?
           AND  ProductURL IS NOT NULL AND ProductURL != ''
-    """).fetchall()
+    """, (SOURCE,)).fetchall()
     conn.close()
 
     if not rows:
-        log.info("alza_snapshot: no alza.cz products found")
+        log.info(f"alza_snapshot: no {SOURCE!r} products found in {db_path}")
         return 0
 
     today_str = date.today().isoformat()
@@ -115,6 +121,23 @@ def run_alza_snapshot(db_path: str | None = None, seed_days: int = 0) -> int:
 
 
 if __name__ == "__main__":
+    # seed_days must default to 0.  It backdates a copy of *today's* prices,
+    # which fabricates history that never happened — fine as a one-time
+    # bootstrap, wrong for any ordinary run.  The scheduler always uses 0;
+    # this entry point used to hardcode 7, so running the module by hand
+    # silently injected synthetic rows.  Opt in explicitly instead.
+    import argparse
+
     logging.basicConfig(level=logging.INFO)
-    n = run_alza_snapshot(seed_days=7)
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--db", dest="db_path", default=None,
+                    help="path to products.db (default: $DB_PATH)")
+    ap.add_argument("--seed-days", type=int, default=0,
+                    help="ALSO insert a synthetic snapshot backdated N days "
+                         "using today's data (bootstrap only; default 0 = off)")
+    args = ap.parse_args()
+    if args.seed_days:
+        print(f"WARNING: seeding {args.seed_days} days of synthetic history "
+              f"from today's prices.")
+    n = run_alza_snapshot(db_path=args.db_path, seed_days=args.seed_days)
     print(f"Done — {n} rows written")

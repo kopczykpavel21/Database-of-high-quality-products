@@ -17,6 +17,8 @@ NOTE: The raw score is on a 0–20 scale (sum of 5 criteria, each 0–4 max),
 not 0–10 as originally assumed. Normalize: score_normalized = note_ir * 5
 """
 
+from __future__ import annotations
+
 import csv
 import hashlib
 import io
