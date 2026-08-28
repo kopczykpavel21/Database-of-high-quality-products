@@ -14,7 +14,7 @@ Scraping:
         /api/run-scraper    — trigger today's due scrapers now (--now flag)
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
-import sqlite3, json, os, math, urllib.parse, mimetypes, subprocess, sys
+import sqlite3, json, os, math, urllib.parse, mimetypes, subprocess, sys, secrets
 import time, datetime, threading
 import logging
 
@@ -70,6 +70,109 @@ CROSS_MARKET_TTL = 1800   # 30 minutes
 # Version string appended to static asset URLs (?v=...) so browsers always
 # fetch fresh JS/CSS after a server restart. Format: YYYYMMDD-HHMMSS.
 _ASSET_VERSION = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+MAX_JSON_BODY_BYTES = int(os.environ.get("MAX_JSON_BODY_BYTES", str(2 * 1024 * 1024)))
+
+_SCANNER_ORIGIN_SUFFIXES = {
+    "heureka.cz", "heureka.sk", "alza.cz", "zbozi.cz",
+    "coolblue.nl", "idealo.de", "fnac.com",
+}
+_DEFAULT_FRONTEND_ORIGINS = {
+    "https://institutkvality.vercel.app",
+    "https://database-of-high-quality-products.fly.dev",
+}
+_FRONTEND_ORIGINS = _DEFAULT_FRONTEND_ORIGINS | {
+    origin.strip().rstrip("/")
+    for origin in os.environ.get("FRONTEND_ORIGINS", "").split(",")
+    if origin.strip()
+}
+_PUBLIC_CORS_GET_PATHS = {
+    "/api/products", "/api/ir-data", "/api/repair", "/api/categories",
+    "/api/stats", "/api/search-suggest", "/api/keywords", "/api/cross-market",
+    "/api/top-picks", "/api/brands", "/api/snapshot-coverage",
+    "/api/snapshot-deltas", "/api/snapshot-movers", "/api/also-at",
+    "/api/product", "/api/product-history", "/api/contrib-stats",
+    "/api/health",
+}
+_ADMIN_GET_PATHS = {
+    "/api/admin/rerank", "/api/run-scraper", "/api/stop-scraper",
+    "/api/start-scraper", "/api/scrape-status", "/api/live-scan",
+}
+_MACHINE_POST_PATHS = {
+    "/api/admin/alza-urls", "/api/admin/bulk-update-products",
+}
+_AUTH_RATE_PATHS = {
+    "/api/register", "/api/login", "/api/request-code", "/api/verify-code",
+    "/api/reset-password", "/api/google-auth", "/api/complete-profile",
+    "/api/scanner-token", "/api/scanner-token/rotate",
+}
+_rate_limit_lock = threading.Lock()
+_rate_limit_buckets: dict[tuple[str, str], list[float]] = {}
+
+
+def _authorization_token(header: str, scheme: str = "Bearer") -> str:
+    parts = (header or "").strip().split(None, 1)
+    if len(parts) != 2 or parts[0].lower() != scheme.lower():
+        return ""
+    return parts[1].strip()
+
+
+def _valid_scraper_key(given_key: str) -> bool:
+    expected_key = os.environ.get("SCRAPER_KEY", "")
+    return bool(expected_key and given_key and secrets.compare_digest(given_key, expected_key))
+
+
+def _origin_host(origin: str) -> tuple[str, str]:
+    try:
+        parsed = urllib.parse.urlparse(origin)
+    except ValueError:
+        return "", ""
+    if parsed.username or parsed.password or parsed.path not in ("", "/"):
+        return "", ""
+    return parsed.scheme.lower(), (parsed.hostname or "").lower().rstrip(".")
+
+
+def is_scanner_origin_allowed(origin: str) -> bool:
+    scheme, host = _origin_host(origin)
+    if scheme == "http" and host in {"localhost", "127.0.0.1"} and os.environ.get("APP_ENV") != "production":
+        return True
+    if scheme != "https":
+        return False
+    return any(host == suffix or host.endswith("." + suffix)
+               for suffix in _SCANNER_ORIGIN_SUFFIXES)
+
+
+def _safe_static_path(request_path: str) -> str | None:
+    """Resolve a /static path while blocking traversal and symlink escapes."""
+    try:
+        relative = urllib.parse.unquote(request_path[len("/static/"):])
+        static_root = os.path.realpath(STATIC)
+        candidate = os.path.realpath(os.path.join(static_root, relative))
+        if os.path.commonpath((static_root, candidate)) != static_root:
+            return None
+        return candidate
+    except (ValueError, OSError):
+        return None
+
+
+def _rate_limit_exceeded(bucket: str, key: str, limit: int, window: int) -> bool:
+    now = time.monotonic()
+    cutoff = now - window
+    bucket_key = (bucket, key)
+    with _rate_limit_lock:
+        hits = [hit for hit in _rate_limit_buckets.get(bucket_key, []) if hit > cutoff]
+        if len(hits) >= limit:
+            _rate_limit_buckets[bucket_key] = hits
+            return True
+        hits.append(now)
+        _rate_limit_buckets[bucket_key] = hits
+        # Prevent an unbounded map under a distributed spray.
+        if len(_rate_limit_buckets) > 10_000:
+            stale = [k for k, values in _rate_limit_buckets.items()
+                     if not values or values[-1] <= cutoff]
+            for stale_key in stale[:5_000]:
+                _rate_limit_buckets.pop(stale_key, None)
+        return False
 
 def _invalidate_html_cache():
     """Call this after a scraper run finishes so the next request rebuilds."""
@@ -3355,6 +3458,47 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass  # silence access log
 
+    def _account_token(self) -> str:
+        return _authorization_token(self.headers.get("Authorization", ""), "Bearer")
+
+    def _require_admin(self) -> bool:
+        from scraper.auth import get_internal_user_by_token
+        user = get_internal_user_by_token(self._account_token())
+        if not user:
+            self.send_json({"ok": False, "error": "Authentication required."}, status=401)
+            return False
+        if not user.get("is_admin"):
+            self.send_json({"ok": False, "error": "Administrator access required."}, status=403)
+            return False
+        if not user.get("email_verified_at"):
+            self.send_json({"ok": False, "error": "Verify the administrator email first."}, status=403)
+            return False
+        return True
+
+    def _require_admin_or_scraper(self) -> bool:
+        if _valid_scraper_key(self.headers.get("X-Scraper-Key", "")):
+            return True
+        return self._require_admin()
+
+    def _set_cors_headers(self) -> None:
+        origin = (self.headers.get("Origin", "") or "").rstrip("/")
+        path = urllib.parse.urlparse(self.path).path
+        if not origin:
+            return
+        if self.command == "GET" and path in _PUBLIC_CORS_GET_PATHS:
+            self.send_header("Access-Control-Allow-Origin", "*")
+        elif origin in _FRONTEND_ORIGINS or (
+            path == "/api/contribute" and is_scanner_origin_allowed(origin)
+        ):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def _set_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "strict-origin-when-cross-origin")
+        self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+
     def send_json(self, data, status=200, max_age=0):
         import gzip as _gzip
         body = json.dumps(data, default=str).encode()
@@ -3369,8 +3513,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(body))
         if use_gzip:
             self.send_header("Content-Encoding", "gzip")
-        # CORS — required when the static frontend is hosted on Cloudflare Pages
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._set_security_headers()
+        self._set_cors_headers()
         if max_age > 0:
             self.send_header("Cache-Control", f"public, max-age={max_age}")
         else:
@@ -3384,6 +3528,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", len(body))
         self.send_header("Cache-Control", f"public, max-age={max_age}")
+        self._set_security_headers()
         self.end_headers()
         self.wfile.write(body)
 
@@ -3391,6 +3536,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path   = parsed.path
         params = urllib.parse.parse_qs(parsed.query)
+
+        if path in _ADMIN_GET_PATHS and not self._require_admin():
+            return
 
         if path == "/":
             self.send_html(build_html(), max_age=120)
@@ -3775,7 +3923,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/me":
             try:
                 from scraper.auth import get_user_by_token
-                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                token = self._account_token()
                 user = get_user_by_token(token)
                 if user:
                     self.send_json({"ok": True, "user": user})
@@ -3794,7 +3942,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/my-contributions":
             try:
                 from scraper.auth import get_user_by_token, open_users_db
-                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                token = self._account_token()
                 user = get_user_by_token(token)
                 if not user:
                     self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
@@ -3837,7 +3985,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/my-sources":
             try:
                 from scraper.auth import get_user_by_token, COUNTRY_SOURCES
-                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                token = self._account_token()
                 user = get_user_by_token(token)
                 if not user:
                     self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
@@ -3848,10 +3996,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self.send_json({"ok": False, "error": str(e)}, status=500)
 
+        elif path == "/api/scanner-context":
+            try:
+                from scraper.auth import get_user_by_scanner_token, COUNTRY_SOURCES
+                scanner_token = _authorization_token(
+                    self.headers.get("Authorization", ""), "Scanner"
+                )
+                user = get_user_by_scanner_token(scanner_token)
+                if not user:
+                    self.send_json({"ok": False, "error": "Invalid or expired scanner token."}, status=401)
+                    return
+                country = user.get("country", "CZ")
+                self.send_json({
+                    "ok": True,
+                    "country": country,
+                    "sources": COUNTRY_SOURCES.get(country, []),
+                })
+            except Exception:
+                logging.error("/api/scanner-context failed", exc_info=True)
+                self.send_json({"ok": False, "error": "Scanner context unavailable."}, status=500)
+
         elif path.startswith("/static/"):
-            fname = path[len("/static/"):].split("?")[0]  # strip ?v= cache-buster
-            fpath = os.path.join(STATIC, fname)
-            if os.path.isfile(fpath):
+            fpath = _safe_static_path(path)
+            if fpath and os.path.isfile(fpath):
                 mime, _ = mimetypes.guess_type(fpath)
                 with open(fpath, "rb") as f:
                     body = f.read()
@@ -3859,6 +4026,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", mime or "application/octet-stream")
                 self.send_header("Content-Length", len(body))
                 self.send_header("Cache-Control", "public, max-age=86400")  # 1 day
+                self._set_security_headers()
                 self.end_headers()
                 self.wfile.write(body)
             else:
@@ -3868,23 +4036,56 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
+        path = urllib.parse.urlparse(self.path).path
+        origin = (self.headers.get("Origin", "") or "").rstrip("/")
+        allowed = origin in _FRONTEND_ORIGINS or (
+            path == "/api/contribute" and is_scanner_origin_allowed(origin)
+        )
+        if not allowed:
+            self.send_json({"ok": False, "error": "Origin not allowed."}, status=403)
+            return
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Scraper-Key")
+        self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path   = parsed.path
 
-        # Read JSON body
+        if path.startswith("/api/admin/"):
+            allowed = (self._require_admin_or_scraper() if path in _MACHINE_POST_PATHS
+                       else self._require_admin())
+            if not allowed:
+                return
+
+        # Read a bounded JSON body. This prevents an unauthenticated request from
+        # exhausting memory before endpoint validation can run.
         try:
             length = int(self.headers.get("Content-Length", 0))
+            if length < 0 or length > MAX_JSON_BODY_BYTES:
+                self.send_json({"ok": False, "error": "Request body too large."}, status=413)
+                return
             body   = json.loads(self.rfile.read(length)) if length > 0 else {}
+            if not isinstance(body, dict):
+                raise ValueError("JSON body must be an object")
         except Exception:
             self.send_json({"ok": False, "error": "Invalid JSON body."}, status=400)
             return
+
+        if path in _AUTH_RATE_PATHS:
+            client_ip = (
+                self.headers.get("Fly-Client-IP", "").strip()
+                or (self.client_address[0] if self.client_address else "unknown")
+            )[:64]
+            email = str(body.get("email", "")).strip().lower()[:320]
+            if (_rate_limit_exceeded(path, client_ip, 20, 15 * 60)
+                    or (email and _rate_limit_exceeded(path, email, 10, 15 * 60))):
+                self.send_json({"ok": False, "error": "Too many attempts. Please try again later."}, status=429)
+                return
 
         if path == "/api/register":
             try:
@@ -3949,7 +4150,7 @@ class Handler(BaseHTTPRequestHandler):
             # Optional body: {"category": "...", "limit": N, "min_reviews": N}
             try:
                 cat = body.get("category")
-                lim = int(body.get("limit", 500))
+                lim = max(1, min(int(body.get("limit", 500)), 5000))
                 minrev = int(body.get("min_reviews", 0))
                 wc = ["source IN ('alza','alza.cz')", "ProductURL LIKE 'http%'"]
                 params = []
@@ -3974,6 +4175,10 @@ class Handler(BaseHTTPRequestHandler):
             #                     "ReviewsCount":..., "AvgStarRating":...}, ...]}
             try:
                 updates = body.get("updates", [])
+                if (not isinstance(updates, list) or len(updates) > 1000
+                        or not all(isinstance(item, dict) for item in updates)):
+                    self.send_json({"ok": False, "error": "updates must be a list of at most 1000 objects."}, status=400)
+                    return
                 _c = open_db()
                 applied = 0; notfound = 0; empty = 0; snapped = 0
                 # Record a real price-history snapshot for each updated product
@@ -4035,6 +4240,10 @@ class Handler(BaseHTTPRequestHandler):
             #                       "recommend_pct":..., "price_czk":..., "return_pct":...}, ...]}
             try:
                 snaps = body.get("snapshots", [])
+                if (not isinstance(snaps, list) or len(snaps) > 1000
+                        or not all(isinstance(item, dict) for item in snaps)):
+                    self.send_json({"ok": False, "error": "snapshots must be a list of at most 1000 objects."}, status=400)
+                    return
                 from scraper.snapshots import ensure_snapshot_table, record_historical_snapshot
                 ensure_snapshot_table(None)
                 inserted = 0; skipped = 0
@@ -4077,6 +4286,12 @@ class Handler(BaseHTTPRequestHandler):
                     test_url = _r[0] if _r else ""
                 if not test_url:
                     self.send_json({"ok": False, "error": "No Alza URL found"}); return
+                _test_parsed = urllib.parse.urlparse(test_url)
+                _test_host = (_test_parsed.hostname or "").lower().rstrip(".")
+                if (_test_parsed.scheme != "https"
+                        or not (_test_host == "alza.cz" or _test_host.endswith(".alza.cz"))):
+                    self.send_json({"ok": False, "error": "Only HTTPS alza.cz URLs are allowed."}, status=400)
+                    return
 
                 result = {"url": test_url}
                 try:
@@ -4144,7 +4359,7 @@ class Handler(BaseHTTPRequestHandler):
             # (bypasses the 3-contributor threshold — for testing / bootstrapping)
             try:
                 from scraper.auth import get_user_by_token, force_merge_user_staged
-                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
+                token = self._account_token()
                 user  = get_user_by_token(token)
                 if not user:
                     self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
@@ -4183,22 +4398,56 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/google-auth":
             try:
                 from scraper.auth import google_auth
-                result = google_auth(
-                    email     = body.get("email", ""),
-                    google_id = body.get("google_id", ""),
-                    name      = body.get("name", ""),
-                )
+                result = google_auth(credential=body.get("credential", ""))
                 self.send_json(result, status=200 if result["ok"] else 400)
             except Exception as e:
-                self.send_json({"ok": False, "error": str(e)}, status=500)
+                logging.error("/api/google-auth failed", exc_info=True)
+                self.send_json({"ok": False, "error": "Google sign-in failed."}, status=500)
+
+        elif path == "/api/logout":
+            try:
+                from scraper.auth import revoke_session_token
+                revoke_session_token(self._account_token())
+                self.send_json({"ok": True})
+            except Exception:
+                logging.error("/api/logout failed", exc_info=True)
+                self.send_json({"ok": False, "error": "Logout failed."}, status=500)
+
+        elif path in ("/api/scanner-token", "/api/scanner-token/rotate"):
+            try:
+                from scraper.auth import (
+                    create_scanner_token, get_user_by_token, revoke_scanner_tokens,
+                )
+                user = get_user_by_token(self._account_token())
+                if not user:
+                    self.send_json({"ok": False, "error": "Authentication required."}, status=401)
+                    return
+                if path.endswith("/rotate"):
+                    revoke_scanner_tokens(user["id"])
+                result = create_scanner_token(user["id"])
+                self.send_json(result, status=200 if result["ok"] else 400)
+            except Exception:
+                logging.error("%s failed", path, exc_info=True)
+                self.send_json({"ok": False, "error": "Could not create scanner token."}, status=500)
 
         elif path == "/api/contribute":
             try:
-                from scraper.auth import get_user_by_token, record_contribution
-                token = (self.headers.get("Authorization", "") or "").removeprefix("Bearer ").strip()
-                user = get_user_by_token(token)
+                from scraper.auth import (
+                    get_user_by_scanner_token, get_user_by_token, record_contribution,
+                )
+                auth_header = self.headers.get("Authorization", "") or ""
+                scanner_token = _authorization_token(auth_header, "Scanner")
+                user = get_user_by_scanner_token(scanner_token)
+                # Short migration bridge for already-installed bookmarklets and
+                # the contributor CLI. Website sessions are expiring and rotated;
+                # all newly generated bookmarklets use the scoped Scanner scheme.
+                if not user and os.environ.get("ALLOW_LEGACY_BOOKMARKLET_BEARER", "true").lower() == "true":
+                    user = get_user_by_token(_authorization_token(auth_header, "Bearer"))
                 if not user:
                     self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
+                    return
+                if _rate_limit_exceeded("contribution", str(user["id"]), 60, 60 * 60):
+                    self.send_json({"ok": False, "error": "Contribution limit reached. Please try again later."}, status=429)
                     return
                 source   = body.get("source", "")
                 products = body.get("products", [])
@@ -4207,9 +4456,11 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 result = record_contribution(user["id"], source, products)
                 self.send_json({"ok": True, **result})
-            except Exception as e:
-                import logging; logging.error(f"/api/contribute: {e}", exc_info=True)
-                self.send_json({"ok": False, "error": str(e)}, status=500)
+            except ValueError as e:
+                self.send_json({"ok": False, "error": str(e)}, status=400)
+            except Exception:
+                logging.error("/api/contribute failed", exc_info=True)
+                self.send_json({"ok": False, "error": "Contribution could not be saved."}, status=500)
 
         elif path == "/api/ingest":
             # ── External scraper ingest ───────────────────────────────────────
@@ -4224,17 +4475,18 @@ class Handler(BaseHTTPRequestHandler):
             #     "url": "https://…" }
             # Auth header:  X-Scraper-Key: <SCRAPER_KEY env var>
             try:
-                expected_key = os.environ.get("SCRAPER_KEY", "")
-                if expected_key:
-                    given_key = self.headers.get("X-Scraper-Key", "")
-                    if given_key != expected_key:
-                        self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
-                        return
+                if not _valid_scraper_key(self.headers.get("X-Scraper-Key", "")):
+                    self.send_json({"ok": False, "error": "Unauthorised."}, status=401)
+                    return
 
                 source   = body.get("source", "")
                 category = body.get("category", "")
                 products = body.get("products", [])
-                if not isinstance(products, list) or not source:
+                if (not isinstance(products, list) or not isinstance(source, str)
+                        or not source.strip() or len(source) > 100
+                        or not isinstance(category, str) or len(category) > 300
+                        or len(products) > 1000
+                        or not all(isinstance(item, dict) for item in products)):
                     self.send_json({"ok": False, "error": "source and products required."}, status=400)
                     return
 
@@ -4256,9 +4508,18 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
                 for p in products:
-                    name = (p.get("Name") or "").strip()
-                    url  = (p.get("ProductURL") or "").strip()
+                    raw_name = p.get("Name") or ""
+                    raw_url = p.get("ProductURL") or ""
+                    name = raw_name.strip()[:500] if isinstance(raw_name, str) else ""
+                    url = raw_url.strip() if isinstance(raw_url, str) else ""
                     if not name or not url:
+                        continue
+                    try:
+                        parsed_url = urllib.parse.urlparse(url)
+                    except ValueError:
+                        continue
+                    if (parsed_url.scheme not in ("http", "https")
+                            or not parsed_url.hostname or len(url) > 2048):
                         continue
                     try:
                         conn.execute(
@@ -4290,9 +4551,9 @@ class Handler(BaseHTTPRequestHandler):
                 _invalidate_html_cache()
                 import logging; logging.info(f"/api/ingest: {source}/{category} — {added} new, {len(products)-added} dupes")
                 self.send_json({"ok": True, "queued": added, "total": len(products)})
-            except Exception as e:
-                import logging; logging.error(f"/api/ingest: {e}", exc_info=True)
-                self.send_json({"ok": False, "error": str(e)}, status=500)
+            except Exception:
+                logging.error("/api/ingest failed", exc_info=True)
+                self.send_json({"ok": False, "error": "Ingest failed."}, status=500)
 
         else:
             self.send_json({"error": "Not found."}, status=404)
@@ -5328,19 +5589,23 @@ if __name__ == "__main__":
             print(f"[init] Auth tables skipped: {_e}", flush=True)
 
         # 5. Master scheduler subprocess + watchdog
-        try:
-            os.makedirs(
-                os.path.join(os.path.dirname(__file__), "scraper", "logs"),
-                exist_ok=True,
-            )
-            _start_scheduler()
-            _pid = _scheduler_proc.pid if _scheduler_proc else "N/A"
-            print(f"[init] Scheduler PID {_pid} — daily wake-up at 03:00", flush=True)
-            # Watchdog: restarts scheduler if it dies (OOM, crash, etc.)
-            threading.Thread(target=_scheduler_watchdog, daemon=True, name="scheduler-watchdog").start()
-            print("[init] Scheduler watchdog started (checks every 5 min)", flush=True)
-        except Exception as _e:
-            print(f"[init] Scheduler not started: {_e}", flush=True)
+        if os.environ.get("AUTO_START_SCHEDULER", "true").lower() != "false":
+            try:
+                os.makedirs(
+                    os.path.join(os.path.dirname(__file__), "scraper", "logs"),
+                    exist_ok=True,
+                )
+                _start_scheduler()
+                _pid = _scheduler_proc.pid if _scheduler_proc else "N/A"
+                print(f"[init] Scheduler PID {_pid} — daily wake-up at 03:00", flush=True)
+                # Watchdog: restarts scheduler if it dies (OOM, crash, etc.)
+                threading.Thread(target=_scheduler_watchdog, daemon=True, name="scheduler-watchdog").start()
+                print("[init] Scheduler watchdog started (checks every 5 min)", flush=True)
+            except Exception as _e:
+                print(f"[init] Scheduler not started: {_e}", flush=True)
+        else:
+            print("[init] AUTO_START_SCHEDULER=false — scheduler subprocess not launched.", flush=True)
+            print("[init] Trigger a scrape manually via GET /api/run-scraper or /api/start-scraper.", flush=True)
 
         # 7a. Populate alza images instantly from SKU codes (no HTTP requests)
         def _run_alza_images():

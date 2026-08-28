@@ -206,7 +206,9 @@ def _parse_page(html: str) -> list[dict]:
 # ── Database ──────────────────────────────────────────────────────────────────
 
 def _load_existing(conn) -> set:
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
+    rows = conn.execute(
+        "SELECT ProductURL FROM products WHERE ProductURL IS NOT NULL AND ProductURL != ''"
+    ).fetchall()
     return {r[0] for r in rows}
 
 
@@ -217,8 +219,11 @@ def _insert(conn, products: list, category: str) -> int:
     inserted = 0
     for p in products:
         record_snapshot(conn, p.get("ProductURL", ""), "testberichte", p, country="DE")
-        key = p["Name"].lower()
-        if key in existing:
+        url = p.get("ProductURL", "")
+        # Dedup on ProductURL — it's what idx_product_url_unique actually
+        # enforces. Name isn't unique, so a Name-based check let two rows
+        # sharing a URL slip past the check and hit the UNIQUE constraint.
+        if not url or url in existing:
             continue
         conn.execute(
             """INSERT INTO products
@@ -228,14 +233,14 @@ def _insert(conn, products: list, category: str) -> int:
             (
                 p["Name"],
                 category,
-                p.get("ProductURL", ""),
+                url,
                 None,
                 p.get("RecommendRate_pct"),
                 p.get("ReviewsCount", 1),
                 "testberichte",
             ),
         )
-        existing.add(key)
+        existing.add(url)
         inserted += 1
     conn.commit()
     return inserted

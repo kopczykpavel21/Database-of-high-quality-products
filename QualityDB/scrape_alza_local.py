@@ -34,9 +34,11 @@ import sys
 import json
 import time
 import argparse
+import os
 import urllib.request
 
 API = "https://database-of-high-quality-products.fly.dev"
+SCRAPER_KEY = os.environ.get("SCRAPER_KEY", "")
 ALZA_STATS = "https://webapi.alza.cz/api/catalog/v2/commodities/{pid}/reviewStats?country=CZ&pgrik={pgrik}&ucik={ucik}"
 
 try:
@@ -123,7 +125,8 @@ def get_price(sess, url: str) -> float | None:
 def get_urls(category, limit, min_reviews):
     body = json.dumps({"category": category, "limit": limit, "min_reviews": min_reviews}).encode()
     req = urllib.request.Request(API + "/api/admin/alza-urls", data=body,
-                                 headers={"Content-Type": "application/json"}, method="POST")
+                                 headers={"Content-Type": "application/json",
+                                          "X-Scraper-Key": SCRAPER_KEY}, method="POST")
     with urllib.request.urlopen(req, timeout=30) as r:
         return json.loads(r.read()).get("urls", [])
 
@@ -131,7 +134,8 @@ def get_urls(category, limit, min_reviews):
 def push(updates):
     body = json.dumps({"updates": updates}).encode()
     req = urllib.request.Request(API + "/api/admin/bulk-update-products", data=body,
-                                 headers={"Content-Type": "application/json"}, method="POST")
+                                 headers={"Content-Type": "application/json",
+                                          "X-Scraper-Key": SCRAPER_KEY}, method="POST")
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read())
 
@@ -146,6 +150,10 @@ def main():
     ap.add_argument("--with-price", action="store_true",
                     help="Also fetch the full product page for current price (slower)")
     args = ap.parse_args()
+
+    if not SCRAPER_KEY:
+        print("SCRAPER_KEY is required. Export the same secret configured on Fly before running.")
+        sys.exit(2)
 
     sess = cffi.Session()
     print("Harvesting Alza session tokens…")

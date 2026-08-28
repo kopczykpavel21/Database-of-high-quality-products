@@ -3362,6 +3362,11 @@ function loadHealth() {
       const nStale   = sources.filter(s => s.status === "stale").length;
       const nImport  = sources.filter(s => s.status === "imported").length;
       const total    = (data.total_products || 0).toLocaleString();
+      const schedulerLabel = data.scheduler_running
+        ? "🟢 Scheduler running"
+        : currentAuthUser?.is_admin
+          ? `🔴 Scheduler stopped <button id="restart-scheduler-btn" style="margin-left:8px;padding:2px 10px;font-size:11px;font-weight:700;border:1.5px solid var(--red);border-radius:20px;background:none;color:var(--red);cursor:pointer;">↺ Restart</button>`
+          : "🔴 Scheduler stopped";
 
       summEl.innerHTML = `
         <span class="health-summary-pill health-pill-total">📦 ${total} products</span>
@@ -3370,8 +3375,27 @@ function loadHealth() {
         ${nStale  ? `<span class="health-summary-pill health-pill-stale">✕ ${nStale} stale</span>` : ""}
         ${nImport ? `<span class="health-summary-pill health-pill-imported">↑ ${nImport} imported</span>` : ""}
         <span class="health-summary-pill" style="background:#f5f5f5;color:#888">
-          ${data.scheduler_running ? "🟢 Scheduler running" : `🔴 Scheduler stopped <button id="restart-scheduler-btn" style="margin-left:8px;padding:2px 10px;font-size:11px;font-weight:700;border:1.5px solid var(--red);border-radius:20px;background:none;color:var(--red);cursor:pointer;" onclick="(async()=>{this.disabled=true;this.textContent='Restarting…';const r=await fetch('${API_BASE}/api/admin/restart-scheduler',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const d=await r.json();this.textContent=d.ok?'↺ Restarted (PID '+d.pid+')':'Failed';})()">↺ Restart</button>`}
+          ${schedulerLabel}
         </span>`;
+
+      document.getElementById("restart-scheduler-btn")?.addEventListener("click", async function() {
+        this.disabled = true;
+        this.textContent = "Restarting…";
+        try {
+          const r = await fetch(`${API_BASE}/api/admin/restart-scheduler`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${getAuthToken() || ""}`,
+              "Content-Type": "application/json",
+            },
+            body: "{}",
+          });
+          const d = await r.json();
+          this.textContent = d.ok ? `↺ Restarted (PID ${d.pid})` : `Failed: ${d.error || r.status}`;
+        } catch (_) {
+          this.textContent = "Failed";
+        }
+      });
 
       rowsEl.innerHTML = sources.map(s => {
         const dotClass  = `health-dot-${s.status}`;
@@ -4260,12 +4284,17 @@ document.addEventListener("DOMContentLoaded", initBrandsPanel);
 
 // ── Institut Kvality auth ────────────────────────────────────────────────────
 const AUTH_TOKEN_KEY = "ik_token";
+const SCANNER_TOKEN_KEY_PREFIX = "ik_scanner_token_";
+let currentAuthUser = null;
 
 function getAuthToken() { return localStorage.getItem(AUTH_TOKEN_KEY); }
 function setAuthToken(t) { localStorage.setItem(AUTH_TOKEN_KEY, t); }
 function clearAuthToken() { localStorage.removeItem(AUTH_TOKEN_KEY); }
+function getScannerToken(userId) { return localStorage.getItem(SCANNER_TOKEN_KEY_PREFIX + userId); }
+function setScannerToken(userId, token) { localStorage.setItem(SCANNER_TOKEN_KEY_PREFIX + userId, token); }
 
 function updateAuthButton(user) {
+  currentAuthUser = user || null;
   const btn   = document.getElementById("auth-btn");
   const icon  = document.getElementById("auth-btn-icon");
   const label = document.getElementById("auth-btn-label");
@@ -4315,7 +4344,7 @@ function showAuthView(view) {
   document.getElementById("tab-register").classList.toggle("active", view === "register");
 }
 
-function populateUserPanel(user) {
+async function populateUserPanel(user) {
   document.getElementById("user-email").textContent   = user.email || "";
   document.getElementById("user-country").textContent = user.country
     ? `Country: ${user.country}` : "";
@@ -4324,12 +4353,13 @@ function populateUserPanel(user) {
 
   const token = getAuthToken() || "";
   const span  = document.getElementById("user-token-display");
-  if (span) span.textContent = token.slice(0, 8) + "…";
+  if (span) span.textContent = "creating secure token…";
 
   // Wire force-merge button
   const mergeBtn = document.getElementById("force-merge-btn");
   const mergeRes = document.getElementById("force-merge-result");
   if (mergeBtn) {
+    mergeBtn.parentElement.style.display = user.is_admin ? "" : "none";
     mergeBtn.onclick = async () => {
       mergeBtn.disabled = true;
       if (mergeRes) mergeRes.textContent = "Merging…";
@@ -4354,12 +4384,40 @@ function populateUserPanel(user) {
     };
   }
 
-  // Generate bookmarklet and set as drag-button href
-  const bkHref = buildBookmarkletHref(token, API_BASE || "https://database-of-high-quality-products.fly.dev");
   const bkBtn  = document.getElementById("bm-drag-btn");
-  if (bkBtn && bkHref) {
-    bkBtn.href = bkHref;
-    bkBtn.onclick = null;   // allow the drag; prevent default only if clicked directly
+  // Generate (once per browser/user) a contribution-only token. Unlike the
+  // website session, a copied bookmarklet can neither read the account nor call
+  // operational/admin endpoints.
+  let scannerToken = getScannerToken(user.id);
+  if (!scannerToken) {
+    try {
+      const response = await fetch(`${API_BASE}/api/scanner-token`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const data = await response.json();
+      if (data.ok && data.scanner_token) {
+        scannerToken = data.scanner_token;
+        setScannerToken(user.id, scannerToken);
+      }
+    } catch (_) {}
+  }
+  if (span) span.textContent = scannerToken ? scannerToken.slice(0, 8) + "…" : "unavailable";
+
+  const bkHref = buildBookmarkletHref(
+    scannerToken,
+    API_BASE || "https://database-of-high-quality-products.fly.dev",
+  );
+  if (bkBtn) {
+    if (bkHref) {
+      bkBtn.href = bkHref;
+      bkBtn.title = "Drag IKOR Skener to your bookmarks bar";
+      bkBtn.onclick = null;
+    } else {
+      bkBtn.removeAttribute("href");
+      bkBtn.title = "Could not create the secure scanner token. Please log in again.";
+    }
   }
 
   // Load global stats + personal contribution breakdown
@@ -4612,16 +4670,17 @@ var scrapers={
 var T=${JSON.stringify(token)},A=${JSON.stringify(apiBase)},h=location.hostname;
 ${scraperSrc.trim()}
 var fn=null;
-Object.keys(scrapers).forEach(function(k){if(h===k||h.endsWith("."+k)||h.includes(k))fn=scrapers[k];});
+Object.keys(scrapers).forEach(function(k){if(h===k||h.endsWith("."+k))fn=scrapers[k];});
 if(!fn){alert("IKOR Skener: Tato str\\u00e1nka nen\\u00ed podporov\\u00e1na.\\nPodporuje: Heureka.cz/sk \\u00b7 Alza.cz \\u00b7 Zbozi.cz \\u00b7 Coolblue.nl \\u00b7 Idealo.de \\u00b7 Fnac.com");return;}
 var ps=fn();
 if(!ps.length){alert("IKOR Skener: Nenalezeny produkty.\\nOtev\\u0159te str\\u00e1nku s v\\u00fdpisem produkt\\u016f.");return;}
 if(!confirm("IKOR Skener: Nalezeno "+ps.length+" produkt\\u016f \\u2014 p\\u0159isp\\u011bt?"))return;
 fetch(A+"/api/contribute",{method:"POST",
-  headers:{"Authorization":"Bearer "+T,"Content-Type":"application/json"},
+  headers:{"Authorization":"Scanner "+T,"Content-Type":"application/json"},
   body:JSON.stringify({products:ps})
 }).then(function(r){return r.json();}).then(function(d){
   if(d.queued!==undefined)alert("IKOR Skener: P\\u0159id\\u00e1no "+d.queued+" produkt\\u016f. D\\u011bkujeme!");
+  else if(d.error&&d.error.toLowerCase().includes("unauthor"))alert("IKOR Skener: Platnost skeneru vypršela. Přihlaste se do IKOR a přetáhněte záložku znovu.");
   else alert("IKOR Skener: Chyba: "+JSON.stringify(d));
 }).catch(function(e){alert("IKOR Skener: Chyba p\\u0159ipojen\\u00ed: "+e.message);});
 })();`;
@@ -4826,15 +4885,26 @@ function initAuthModal() {
     }
   });
 
-  logoutBtn?.addEventListener("click", () => {
+  logoutBtn?.addEventListener("click", async () => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await fetch(`${API_BASE}/api/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: "{}",
+        });
+      } catch (_) {}
+    }
     clearAuthToken();
     updateAuthButton(null);
     closeAuthModal();
   });
 
   copyBtn?.addEventListener("click", () => {
-    const token = getAuthToken() || "";
-    const text  = `python3 contrib_scraper.py --token ${token}`;
+    const token = currentAuthUser ? getScannerToken(currentAuthUser.id) || "" : "";
+    if (!token) return;
+    const text  = `python3 contrib_scraper.py --scanner-token ${token}`;
     navigator.clipboard?.writeText(text).then(() => {
       copyBtn.textContent = "✓";
       setTimeout(() => { copyBtn.textContent = "📋"; }, 1500);

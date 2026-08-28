@@ -317,20 +317,25 @@ def scrape_page(url: str, session) -> list:
 
 # ── Database helpers ──────────────────────────────────────────────────────────
 
-def load_existing_names(conn: sqlite3.Connection) -> set:
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
+def load_existing_urls(conn: sqlite3.Connection) -> set:
+    rows = conn.execute(
+        "SELECT ProductURL FROM products WHERE ProductURL IS NOT NULL AND ProductURL != ''"
+    ).fetchall()
     return {r[0] for r in rows}
 
 
 def insert_products(conn: sqlite3.Connection, products: list, category: str) -> int:
     ensure_snapshot_table(conn)
-    existing = load_existing_names(conn)
+    existing = load_existing_urls(conn)
     inserted = 0
     for p in products:
-        key = p["Name"].lower()
         url = p.get("ProductURL", "")
 
-        if key not in existing:
+        # Dedup on ProductURL — it's what idx_product_url_unique actually enforces.
+        # (Name isn't unique: the same URL can render with a different title
+        # across category listings — bundle vs. standalone, truncated vs. full —
+        # which used to slip past a Name-based check and hit the UNIQUE constraint.)
+        if url and url not in existing:
             conn.execute(
                 """INSERT INTO products
                    (Name, Category, ProductURL, AvgStarRating,
@@ -346,7 +351,7 @@ def insert_products(conn: sqlite3.Connection, products: list, category: str) -> 
                     "amazon",
                 )
             )
-            existing.add(key)
+            existing.add(url)
             inserted += 1
 
         # Always record a snapshot — for both new AND existing products.

@@ -649,7 +649,7 @@
           <div class="user-download-section">
             <p style="font-size:0.82em;color:var(--text2);margin-bottom:8px">Spusťte lokálně pro hromadný sběr dat:</p>
             <div class="user-token-box">
-              <code id="contrib-cmd">python3 contrib_scraper.py --token <span id="user-token-display">…</span></code>
+              <code id="contrib-cmd">python3 contrib_scraper.py --scanner-token <span id="user-token-display">…</span></code>
               <button class="copy-token-btn" id="copy-token-btn" title="Copy to clipboard">📋</button>
             </div>
             <a href="/static/contrib_scraper.py" download class="download-btn">⬇ Download contrib_scraper.py</a>
@@ -657,7 +657,7 @@
         </details>
 
         <!-- Admin: force-merge staged contributions (bypasses 3-user threshold) -->
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <div id="admin-contribution-actions" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
           <button id="force-merge-btn" style="font-size:0.78em;background:none;border:1px solid var(--border);
             border-radius:6px;padding:4px 10px;color:var(--text2);cursor:pointer;transition:all var(--transition)"
             title="Push your staged contributions into the main database (admin only)">

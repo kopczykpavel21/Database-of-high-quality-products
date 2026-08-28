@@ -107,8 +107,8 @@ def _is_valid_heureka_url(url: str) -> bool:
     """
     Return True only for genuine Heureka product page URLs.
 
-    Filters out two kinds of tracking/redirect junk Heureka sometimes
-    injects into listing pages:
+    Filters out three kinds of non-product junk Heureka injects into
+    listing pages:
 
     1. Relative click-tracking paths like:
          /exit-click-web?bb=0&cs=4&et=eyJhbGci…
@@ -117,6 +117,14 @@ def _is_valid_heureka_url(url: str) -> bool:
     2. Anonymous hashed-domain click trackers like:
          https://3b03526a0dbc2e6018e63348d8d47352.heureka.cz/0/74512.click?…
        Real product URLs never contain ".click?" and never use that hash subdomain.
+
+    3. Editorial "how to choose a ..." guide articles, e.g.:
+         https://www.heureka.cz/a/jak-vybrat-televizi-c2873-21296/
+       These render as the first card in every category listing and look
+       like a normal product card, but link into the bare www.heureka.cz
+       article namespace instead of a category subdomain — real product
+       pages always live on a category subdomain (televize.heureka.cz/…,
+       mysi.heureka.cz/…, etc.), never on www.heureka.cz/a/…
     """
     if not url or not url.startswith("http"):
         return False
@@ -124,6 +132,8 @@ def _is_valid_heureka_url(url: str) -> bool:
         return False
     # The hashed subdomain (32-char hex) is Heureka's internal click tracker
     if re.search(r"[0-9a-f]{32}\.heureka\.", url):
+        return False
+    if re.search(r"//www\.heureka\.cz/a/", url):
         return False
     return True
 
@@ -141,42 +151,41 @@ def scrape_page(url: str, session) -> list:
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    cards = soup.select(".c-product")
+    # Heureka now ships CSS-modules class names that change per deploy
+    # (e.g. "Product-module_c-product__13-0-0__ue7VH" instead of the old
+    # stable ".c-product"), so we key off their data-testid attributes
+    # instead — those are meant to stay stable across frontend rebuilds.
+    cards = soup.select("[data-testid='product-list-item']")
     if not cards:
-        log.debug(f"  No .c-product cards found at {url}")
+        log.debug(f"  No product-list-item cards found at {url}")
         return []
 
     products = []
     skipped_tracking = 0
     for card in cards:
         # Name & URL
-        name_el = card.select_one(".c-product__link")
+        name_el = card.select_one("[data-testid='product-title-link']")
         if not name_el:
             continue
         name = name_el.get_text(strip=True)
-        overlay = card.select_one(".c-product__overlay-link")
-        product_url = name_el.get("href") or (overlay.get("href") if overlay else "")
+        product_url = name_el.get("href") or ""
 
-        # Skip Heureka click-tracking redirect URLs — they are session-scoped
-        # and useless as persistent product identifiers.
+        # Skip Heureka click-tracking redirects and editorial guide
+        # articles — they are not persistent product identifiers.
         if not _is_valid_heureka_url(product_url):
             skipped_tracking += 1
             continue
 
         # Rating %
-        rating_el = card.select_one(".c-rating-widget__value")
+        rating_el = card.select_one("[data-testid='Rating-value']")
         rating_pct = parse_rating(rating_el.get_text(strip=True) if rating_el else "")
 
-        # Review count — span that contains "recenzí" or "hodnocení"
-        review_span = next(
-            (s for s in card.find_all("span")
-             if "recenz" in s.get_text().lower() or "hodnocen" in s.get_text().lower()),
-            None
-        )
-        reviews = parse_reviews(review_span.get_text(strip=True) if review_span else "")
+        # Review count
+        review_el = card.select_one("[data-testid='star-rating-review-count']")
+        reviews = parse_reviews(review_el.get_text(strip=True) if review_el else "")
 
         # Price (lowest offer)
-        price_el = card.select_one(".c-product__price--bold, .c-product__price")
+        price_el = card.select_one("[data-testid='ProductPrice']")
         price = parse_price(price_el.get_text(strip=True) if price_el else "")
 
         products.append({
@@ -194,20 +203,25 @@ def scrape_page(url: str, session) -> list:
 
 # ── Database helpers ─────────────────────────────────────────────────────────
 
-def load_existing_names(conn: sqlite3.Connection) -> set:
-    rows = conn.execute("SELECT lower(Name) FROM products").fetchall()
+def load_existing_urls(conn: sqlite3.Connection) -> set:
+    rows = conn.execute(
+        "SELECT ProductURL FROM products WHERE ProductURL IS NOT NULL AND ProductURL != ''"
+    ).fetchall()
     return {r[0] for r in rows}
 
 
 def insert_products(conn: sqlite3.Connection, products: list, category: str) -> int:
     ensure_snapshot_table(conn)
-    existing = load_existing_names(conn)
+    existing = load_existing_urls(conn)
     inserted = 0
     for p in products:
-        key = p["Name"].lower()
         url = p.get("ProductURL", "")
 
-        if key not in existing:
+        # Dedup on ProductURL — it's what idx_product_url_unique actually enforces.
+        # (Name isn't unique: the same URL can render with a different title
+        # across category listings — bundle vs. standalone, truncated vs. full —
+        # which used to slip past a Name-based check and hit the UNIQUE constraint.)
+        if url and url not in existing:
             conn.execute(
                 """INSERT INTO products
                    (Name, Category, ProductURL, Price_CZK,
@@ -223,7 +237,7 @@ def insert_products(conn: sqlite3.Connection, products: list, category: str) -> 
                     "heureka",
                 )
             )
-            existing.add(key)
+            existing.add(url)
             inserted += 1
 
         # Always record a snapshot — for both new AND existing products.

@@ -138,6 +138,28 @@ def parse_eur(value):
         return None
 
 
+# A euro price outside this band is not a price, it is a unit bug.  Otto sells
+# nothing for 20 cents and nothing for six figures, so a value outside the band
+# is almost always a factor-of-100 slip.  Drop it loudly rather than write a
+# number that silently poisons every downstream median.  The ceiling is set
+# well above the dearest thing these catalogues carry (a workstation GPU at
+# ~8k EUR) and well below a mid-priced item inflated by 100.  It is a
+# backstop, not a detector: a 59.99 EUR item inflated to 5999 still lands
+# inside the band, which is why the parser, not the guard, is the fix.
+SANE_MIN_EUR = 0.50
+SANE_MAX_EUR = 20_000.0
+
+
+def sane_eur(price, name=None):
+    """Return `price`, or None if it cannot plausibly be a euro amount."""
+    if price is None:
+        return None
+    if SANE_MIN_EUR <= price <= SANE_MAX_EUR:
+        return price
+    print(f"    ! implausible price {price!r} EUR -- dropped ({str(name)[:60]})")
+    return None
+
+
 def parse_float(value):
     if value is None:
         return None
@@ -221,25 +243,16 @@ def _parse_otto_product(item):
                 (p.get("regular") or {}).get("value") or
                 (p.get("current") or {}).get("value")
             )
-            # Otto JSON stores prices as:
-            #   int   → cents  (34900  = €349.00, must divide by 100)
-            #   float = whole  → cents  (34900.0 = €349.00, must divide by 100)
-            #   float ≠ whole  → euros  (349.99  = €349.99, use as-is)
-            # WARNING: never pass a float directly to parse_eur() — it strips
-            # the decimal point, turning 45.99 into 4599!
-            if isinstance(raw, int):
-                price = raw / 100.0
-            elif isinstance(raw, float) and raw == int(raw):
-                price = raw / 100.0
-            elif isinstance(raw, float):
-                price = raw          # already in EUR (e.g. 45.99)
-            else:
-                price = parse_eur(raw)
-    elif isinstance(p, (int, float)):
-        # Top-level integer/float — treat as cents
-        price = float(p) / 100.0
-    elif isinstance(p, str):
+            # Otto quotes prices in EUROS, never in cents.  Verified against
+            # live product pages: JSON-LD offers.price is a 2-decimal string
+            # ("439.00" = 439.00 EUR, "15.10" = 15.10 EUR) and the numeric
+            # fields agree with it.  The old code divided ints by 100 on the
+            # theory that they were cents, turning a 349 EUR machine into 3.49.
+            price = parse_eur(raw)
+    elif isinstance(p, (int, float, str)):
         price = parse_eur(p)
+
+    price = sane_eur(price, name)
 
     agg    = item.get("aggregateRating") or item.get("rating") or {}
     rating = parse_float(
@@ -310,7 +323,7 @@ def _parse_jsonld(item, out):
     offers = item.get("offers") or {}
     if isinstance(offers, list):
         offers = offers[0] if offers else {}
-    price = parse_eur((offers or {}).get("price"))
+    price = sane_eur(parse_eur((offers or {}).get("price")), name)
     agg   = item.get("aggregateRating") or {}
     out.append({
         "Name":             name,

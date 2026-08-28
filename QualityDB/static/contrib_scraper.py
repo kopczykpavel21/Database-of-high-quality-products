@@ -7,7 +7,7 @@ shared Institut Kvality database.  No data is collected without your consent;
 you choose which source to scrape and nothing is submitted until you confirm.
 
 Usage:
-    python3 contrib_scraper.py [--server URL] [--token TOKEN]
+    python3 contrib_scraper.py [--server URL] [--scanner-token TOKEN]
 
 Requirements:
     pip install requests beautifulsoup4
@@ -33,18 +33,19 @@ import urllib.parse
 from typing import Optional
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DEFAULT_SERVER = "https://institutkvality.vercel.app"   # change if running locally
+DEFAULT_SERVER = "https://database-of-high-quality-products.fly.dev"
 
 
 # ── HTTP helpers ───────────────────────────────────────────────────────────────
 
-def _post(server: str, path: str, payload: dict, token: Optional[str] = None) -> dict:
+def _post(server: str, path: str, payload: dict, token: Optional[str] = None,
+          token_scheme: str = "Bearer") -> dict:
     url  = server.rstrip("/") + path
     data = json.dumps(payload).encode()
     req  = urllib.request.Request(url, data=data,
                                   headers={"Content-Type": "application/json"})
     if token:
-        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Authorization", f"{token_scheme} {token}")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -58,11 +59,12 @@ def _post(server: str, path: str, payload: dict, token: Optional[str] = None) ->
         return {"ok": False, "error": str(e)}
 
 
-def _get(server: str, path: str, token: Optional[str] = None) -> dict:
+def _get(server: str, path: str, token: Optional[str] = None,
+         token_scheme: str = "Bearer") -> dict:
     url = server.rstrip("/") + path
     req = urllib.request.Request(url)
     if token:
-        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Authorization", f"{token_scheme} {token}")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read())
@@ -91,7 +93,7 @@ def login_or_register(server: str) -> tuple[str, dict]:
 def _do_login(server: str) -> tuple[str, dict]:
     email    = input("Email: ").strip()
     password = _read_password("Password: ")
-    result   = _post(server, "/api/auth/login", {"email": email, "password": password})
+    result   = _post(server, "/api/login", {"email": email, "password": password})
     if not result.get("ok"):
         print(f"\n✗ Login failed: {result.get('error')}")
         sys.exit(1)
@@ -126,7 +128,7 @@ def _do_register(server: str) -> tuple[str, dict]:
     q2 = input("\n2. Which product categories do you think are most affected by planned obsolescence?\n   → ").strip()
     q3 = input("\n3. How do you currently discover high-quality products?\n   → ").strip()
 
-    result = _post(server, "/api/auth/register", {
+    result = _post(server, "/api/register", {
         "email": email, "password": pw, "country": country,
         "q1": q1, "q2": q2, "q3": q3,
     })
@@ -147,9 +149,10 @@ def _read_password(prompt: str) -> str:
 
 # ── Source selection ───────────────────────────────────────────────────────────
 
-def choose_source(server: str, token: str, user: dict) -> dict:
+def choose_source(server: str, token: str, user: dict, token_scheme: str = "Bearer") -> dict:
     """Fetch available sources for the user's country and let them pick one."""
-    result = _get(server, "/api/auth/my-sources", token=token)
+    path = "/api/scanner-context" if token_scheme == "Scanner" else "/api/my-sources"
+    result = _get(server, path, token=token, token_scheme=token_scheme)
     if not result.get("ok"):
         print(f"✗ Could not fetch sources: {result.get('error')}")
         sys.exit(1)
@@ -380,25 +383,47 @@ def main():
                         help=f"Server URL (default: {DEFAULT_SERVER})")
     parser.add_argument("--token",  default=None,
                         help="Skip login — use a saved API token directly")
+    parser.add_argument("--scanner-token", default=None,
+                        help="Use a contribution-only IKOR scanner token")
     args = parser.parse_args()
+
+    if args.token and args.scanner_token:
+        parser.error("use either --token or --scanner-token, not both")
 
     server = args.server.rstrip("/")
     print(f"  Server: {server}")
 
     # ── 1. Auth ──────────────────────────────────────────────────────────────
-    if args.token:
-        token = args.token
-        result = _get(server, "/api/auth/me", token=token)
+    token_scheme = "Scanner" if args.scanner_token else "Bearer"
+    if args.scanner_token:
+        token = args.scanner_token
+        result = _get(server, "/api/scanner-context", token=token, token_scheme=token_scheme)
+        if not result.get("ok"):
+            print(f"✗ Scanner token invalid: {result.get('error')}")
+            sys.exit(1)
+        user = {"country": result["country"]}
+        print(f"✓ Using contribution-only scanner token for {result['country']}")
+    elif args.token:
+        account_token = args.token
+        result = _get(server, "/api/me", token=account_token)
         if not result.get("ok"):
             print(f"✗ Token invalid: {result.get('error')}")
             sys.exit(1)
         user = result["user"]
         print(f"✓ Using saved token — logged in as {user['email']}")
     else:
-        token, user = login_or_register(server)
+        account_token, user = login_or_register(server)
+
+    if token_scheme == "Bearer":
+        scanner = _post(server, "/api/scanner-token", {}, token=account_token)
+        if not scanner.get("ok"):
+            print(f"✗ Could not create a contribution token: {scanner.get('error')}")
+            sys.exit(1)
+        token = scanner["scanner_token"]
+        token_scheme = "Scanner"
 
     # ── 2. Pick source ────────────────────────────────────────────────────────
-    source = choose_source(server, token, user)
+    source = choose_source(server, token, user, token_scheme=token_scheme)
     print(f"\n  Selected: {source['name']} ({source['key']})")
 
     # ── 3. Scrape locally ─────────────────────────────────────────────────────
@@ -425,8 +450,9 @@ def main():
     total_dup    = 0
     for i in range(0, len(products), BATCH):
         batch  = products[i:i + BATCH]
-        result = _post(server, "/api/auth/contribute",
-                       {"source": source["key"], "products": batch}, token=token)
+        result = _post(server, "/api/contribute",
+                       {"source": source["key"], "products": batch}, token=token,
+                       token_scheme=token_scheme)
         if not result.get("ok"):
             print(f"  ✗ Upload error: {result.get('error')}")
             sys.exit(1)
@@ -442,7 +468,7 @@ def main():
     print("  with consistent quality data.  Thank you for contributing!\n")
 
     # Show updated leaderboard stats
-    stats = _get(server, "/api/auth/contrib-stats")
+    stats = _get(server, "/api/contrib-stats")
     if "total_contributors" in stats:
         print(f"  Global stats: {stats['total_contributors']} contributors, "
               f"{stats['total_staged']} staged, {stats['total_merged']} merged.")

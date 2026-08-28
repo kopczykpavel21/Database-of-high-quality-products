@@ -135,17 +135,43 @@ def already_ran_today(conn: sqlite3.Connection, name: str) -> bool:
 #  Scraper runner — wraps each callable with timing, retry, and tracking
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _extract_stats(result) -> dict:
+    """Normalize a scraper's return value into {"added": int, "updated": int}.
+
+    Scraper entry points return one of three shapes (verified per-scraper):
+      • dict keyed total_added/added/total_inserted/inserted (+ total_updated/updated)
+        — heureka/zbozi/digitec/etc. only ever set the *_added key (no update
+        tracking), ceneo/fnac use total_inserted/total_updated, darty uses
+        bare inserted/updated.
+      • a bare (inserted, updated) tuple — amazon_de, otto, geizhals, saturn,
+        warentest all return this instead of a dict.
+      • anything else — falls back to 0/0 (e.g. subprocess-mode scrapers).
+    """
+    if isinstance(result, dict):
+        added = (
+            result.get("total_added")
+            or result.get("added")
+            or result.get("total_inserted")
+            or result.get("inserted")
+            or 0
+        )
+        updated = result.get("total_updated") or result.get("updated") or 0
+        return {"added": added, "updated": updated}
+
+    if isinstance(result, (tuple, list)) and len(result) == 2:
+        added, updated = result
+        return {"added": added or 0, "updated": updated or 0}
+
+    return {"added": 0, "updated": 0}
+
+
 def _run_once(scraper: dict) -> tuple:
     """Call a scraper's entry point. Returns (success, stats_dict)."""
-    fn    = scraper["fn"]
-    stats = {"added": 0, "updated": 0}
+    fn = scraper["fn"]
 
     if callable(fn):
         result = fn()
-        if isinstance(result, dict):
-            stats["added"]   = result.get("total_added",   result.get("added",   0)) or 0
-            stats["updated"] = result.get("total_updated", result.get("updated", 0)) or 0
-        return True, stats
+        return True, _extract_stats(result)
 
     if isinstance(fn, list):   # subprocess mode (Playwright / argparse scrapers)
         result = subprocess.run(fn, capture_output=True, text=True, timeout=7200)
@@ -153,7 +179,7 @@ def _run_once(scraper: dict) -> tuple:
             raise RuntimeError(
                 f"subprocess exited {result.returncode}:\n{result.stderr[-1000:]}"
             )
-        return True, stats
+        return True, {"added": 0, "updated": 0}
 
     raise TypeError(f"Unknown fn type for {scraper['name']}: {type(fn)}")
 

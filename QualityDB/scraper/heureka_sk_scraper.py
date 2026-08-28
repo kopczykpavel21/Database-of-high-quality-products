@@ -100,13 +100,18 @@ def warm_up(session):
 
 
 def _is_valid_heureka_url(url: str) -> bool:
-    """Return True only for genuine product page URLs (not click-tracking redirects)."""
+    """Return True only for genuine product page URLs (not click-tracking
+    redirects or editorial "how to choose a ..." guide articles)."""
     if not url or not url.startswith("http"):
         return False
     if ".click?" in url:
         return False
     # Reject Heureka's hashed anonymous click-tracker subdomain (32-char hex)
     if re.search(r"[0-9a-f]{32}\.heureka\.", url):
+        return False
+    # Reject editorial guide articles in the bare www.heureka.sk/a/ namespace —
+    # real product pages always live on a category subdomain instead.
+    if re.search(r"//www\.heureka\.sk/a/", url):
         return False
     return True
 
@@ -120,36 +125,36 @@ def scrape_page(url, session):
         return []
 
     soup = BeautifulSoup(resp.text, "html.parser")
-    cards = soup.select(".c-product")
+    # Heureka now ships CSS-modules class names that change per deploy
+    # (e.g. "Product-module_c-product__13-0-0__ue7VH" instead of the old
+    # stable ".c-product"), so we key off their data-testid attributes
+    # instead — those are meant to stay stable across frontend rebuilds.
+    cards = soup.select("[data-testid='product-list-item']")
     if not cards:
-        log.debug(f"  No .c-product cards at {url}")
+        log.debug(f"  No product-list-item cards at {url}")
         return []
 
     products = []
     skipped_tracking = 0
     for card in cards:
-        name_el = card.select_one(".c-product__link")
+        name_el = card.select_one("[data-testid='product-title-link']")
         if not name_el: continue
         name = name_el.get_text(strip=True)
-        overlay = card.select_one(".c-product__overlay-link")
-        url_p = name_el.get("href") or (overlay.get("href") if overlay else "")
+        url_p = name_el.get("href") or ""
 
-        # Skip click-tracking redirect URLs — not stable product identifiers
+        # Skip click-tracking redirects and editorial guide articles —
+        # not stable product identifiers
         if not _is_valid_heureka_url(url_p):
             skipped_tracking += 1
             continue
 
-        rating_el = card.select_one(".c-rating-widget__value")
+        rating_el = card.select_one("[data-testid='Rating-value']")
         rating = parse_rating(rating_el.get_text(strip=True) if rating_el else "")
 
-        review_span = next(
-            (s for s in card.find_all("span")
-             if "recenz" in s.get_text().lower() or "hodnocen" in s.get_text().lower()),
-            None
-        )
-        reviews = parse_reviews(review_span.get_text(strip=True) if review_span else "")
+        review_el = card.select_one("[data-testid='star-rating-review-count']")
+        reviews = parse_reviews(review_el.get_text(strip=True) if review_el else "")
 
-        price_el = card.select_one(".c-product__price--bold, .c-product__price")
+        price_el = card.select_one("[data-testid='ProductPrice']")
         price = parse_price(price_el.get_text(strip=True) if price_el else "")
 
         products.append({

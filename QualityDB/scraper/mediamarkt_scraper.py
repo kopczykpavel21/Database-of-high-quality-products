@@ -14,6 +14,15 @@ Strategy (more robust than v1 category-slug approach):
 
   UPSERT on ProductURL.
   country='DE', currency='EUR'.
+
+MULTI-SITE
+──────────
+MediaMarkt and Saturn are the same Ceconomy storefront with two brands, so the
+parsers here work unchanged on either.  Every function that touches a URL takes
+an explicit `base_url` instead of reading the module constant, because
+saturn_scraper.py used to override only the request headers and silently kept
+writing mediamarkt.de product URLs under source='saturn_de'.  `enforce_host`
+is the guard that makes a repeat of that fail loudly instead of quietly.
 """
 
 import os
@@ -22,7 +31,7 @@ import sys
 import time
 import json
 import sqlite3
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, urlparse
 
 try:
     from curl_cffi import requests as cffi_requests
@@ -36,8 +45,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 from config import DB_PATH
 
 # ── Config ────────────────────────────────────────────────────────────────────
+# Defaults only.  Do not read these inside functions -- pass `base_url` down, so
+# a second Ceconomy storefront (Saturn) cannot silently inherit MediaMarkt URLs.
 BASE_URL   = "https://www.mediamarkt.de"
-SEARCH_URL = BASE_URL + "/de/search.html"
+SATURN_BASE_URL = "https://www.saturn.de"
+
+
+def search_url_for(base_url):
+    """Search endpoint for a Ceconomy storefront.  Same path on both brands."""
+    return base_url.rstrip("/") + "/de/search.html"
+
+
+SEARCH_URL = search_url_for(BASE_URL)
 
 # These are search terms, not category slugs — will keep working even if
 # MediaMarkt reorganises its category tree.
@@ -71,20 +90,49 @@ MAX_RETRIES = 3
 
 # ── Session ───────────────────────────────────────────────────────────────────
 
-def make_session():
+def make_session(base_url=BASE_URL):
+    base_url = base_url.rstrip("/")
     s = cffi_requests.Session()
     s.headers.update({
         "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
-        "Referer":         BASE_URL + "/",
+        "Referer":         base_url + "/",
+        "Origin":          base_url,
     })
     try:
-        s.get(BASE_URL + "/", impersonate="chrome131", timeout=15)
+        s.get(base_url + "/", impersonate="chrome131", timeout=15)
         time.sleep(1.5)
     except Exception:
         pass
     return s
+
+
+# ── Host guard ────────────────────────────────────────────────────────────────
+
+def host_of(url):
+    """Bare hostname of `url`, without a leading www."""
+    host = (urlparse(str(url or "")).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def enforce_host(products, base_url):
+    """Drop products whose URL is not on `base_url`'s host, and say so.
+
+    A Saturn scrape that returns mediamarkt.de URLs is not partially right, it
+    is the wrong shop wearing the right label -- which is exactly the bug that
+    put 550 MediaMarkt rows into the DB as source='saturn_de'.  Dropping is
+    correct here: a row kept under the wrong source becomes a second
+    "independent" retailer downstream.
+    """
+    want = host_of(base_url)
+    kept = [p for p in products if host_of(p.get("ProductURL")) == want]
+    dropped = len(products) - len(kept)
+    if dropped:
+        seen = {host_of(p.get("ProductURL")) for p in products} - {want}
+        print(f"    ! {dropped} product(s) not on {want} "
+              f"(got {', '.join(sorted(h for h in seen if h)) or 'no host'}) -- dropped")
+    return kept
 
 
 # ── Parsers ───────────────────────────────────────────────────────────────────
@@ -137,6 +185,24 @@ def parse_eur(value):
         return None
 
 
+# A euro price outside this band is not a price, it is a unit bug.  MediaMarkt
+# sells nothing for 20 cents and nothing for six figures, so a value that lands
+# outside the band is almost always a factor-of-100 slip.  Drop it loudly
+# rather than writing a number that silently poisons every downstream median.
+SANE_MIN_EUR = 0.50
+SANE_MAX_EUR = 20_000.0
+
+
+def sane_eur(price, name=None):
+    """Return `price`, or None if it cannot plausibly be a euro amount."""
+    if price is None:
+        return None
+    if SANE_MIN_EUR <= price <= SANE_MAX_EUR:
+        return price
+    print(f"    ! implausible price {price!r} EUR -- dropped ({str(name)[:60]})")
+    return None
+
+
 def parse_float(value):
     if value is None:
         return None
@@ -155,7 +221,7 @@ def parse_int(value):
 
 # ── JSON response extractor ───────────────────────────────────────────────────
 
-def extract_from_json(data):
+def extract_from_json(data, base_url=BASE_URL):
     """Handle various shapes of MediaMarkt's JSON API response."""
     candidates = (
         data.get("products") or
@@ -164,10 +230,10 @@ def extract_from_json(data):
         data.get("items") or
         []
     )
-    return parse_product_list(candidates)
+    return parse_product_list(candidates, base_url)
 
 
-def parse_product_list(items):
+def parse_product_list(items, base_url=BASE_URL):
     products = []
     for item in items:
         try:
@@ -182,14 +248,19 @@ def parse_product_list(items):
             )
             if not url_part:
                 continue
-            product_url = url_part if url_part.startswith("http") else BASE_URL + url_part
+            product_url = (url_part if url_part.startswith("http")
+                           else base_url.rstrip("/") + url_part)
 
             price_field = item.get("price")
             if isinstance(price_field, dict):
-                price_raw = price_field.get("value") or price_field.get("formattedValue")
+                # Prefer the formatted string: "939,99 €" states its own unit,
+                # so it cannot be misread as cents.  A bare `value` is only a
+                # number and has to be trusted to be euros -- that ambiguity is
+                # what produced the 2026 scale corruption (see parse_eur).
+                price_raw = price_field.get("formattedValue") or price_field.get("value")
             else:
                 price_raw = price_field or item.get("priceValue")
-            price = parse_eur(price_raw)
+            price = sane_eur(parse_eur(price_raw), item.get("name") or item.get("title"))
 
             agg       = item.get("aggregateRating") or {}
             rating    = parse_float(item.get("ratingValue") or item.get("rating") or agg.get("ratingValue"))
@@ -212,7 +283,7 @@ def parse_product_list(items):
 
 # ── __NEXT_DATA__ extractor ───────────────────────────────────────────────────
 
-def extract_next_data(html):
+def extract_next_data(html, base_url=BASE_URL):
     soup = BeautifulSoup(html, "html.parser")
     tag  = soup.find("script", id="__NEXT_DATA__")
     if not tag:
@@ -227,7 +298,7 @@ def extract_next_data(html):
             return []
         if isinstance(node, list) and len(node) >= 3:
             if all(isinstance(x, dict) and ("name" in x or "title" in x) for x in node[:3]):
-                result = parse_product_list(node)
+                result = parse_product_list(node, base_url)
                 if result:
                     return result
         if isinstance(node, dict):
@@ -242,7 +313,7 @@ def extract_next_data(html):
 
 # ── JSON-LD fallback ──────────────────────────────────────────────────────────
 
-def extract_jsonld(html):
+def extract_jsonld(html, base_url=BASE_URL):
     products = []
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all("script", type="application/ld+json"):
@@ -252,17 +323,17 @@ def extract_jsonld(html):
             continue
         if isinstance(data, list):
             for item in data:
-                parse_jsonld_item(item, products)
+                parse_jsonld_item(item, products, base_url)
         else:
-            parse_jsonld_item(data, products)
+            parse_jsonld_item(data, products, base_url)
     return products
 
 
-def parse_jsonld_item(item, out):
+def parse_jsonld_item(item, out, base_url=BASE_URL):
     t = item.get("@type", "")
     if t == "ItemList":
         for el in item.get("itemListElement", []):
-            parse_jsonld_item(el.get("item", el), out)
+            parse_jsonld_item(el.get("item", el), out, base_url)
         return
     if t != "Product":
         return
@@ -275,7 +346,7 @@ def parse_jsonld_item(item, out):
     offers = item.get("offers")
     if isinstance(offers, list):
         offers = offers[0] if offers else {}
-    price = parse_eur((offers or {}).get("price"))
+    price = sane_eur(parse_eur((offers or {}).get("price")), name)
 
     agg       = item.get("aggregateRating") or {}
     rating    = parse_float(agg.get("ratingValue"))
@@ -283,7 +354,8 @@ def parse_jsonld_item(item, out):
 
     out.append({
         "Name":             name,
-        "ProductURL":       url if url.startswith("http") else BASE_URL + url,
+        "ProductURL":       (url if url.startswith("http")
+                             else base_url.rstrip("/") + url),
         "SKU":              str(item.get("sku") or ""),
         "Price_EUR":        price,
         "AvgStarRating":    rating,
@@ -294,15 +366,23 @@ def parse_jsonld_item(item, out):
 
 # ── Fetch one search query ────────────────────────────────────────────────────
 
-def fetch_query(session, query):
+def fetch_query(session, query, base_url=BASE_URL):
+    """Search one term on the Ceconomy storefront at `base_url`.
+
+    `base_url` must match the session built by make_session(base_url) -- the
+    returned rows are host-checked against it, so a mismatch yields nothing
+    rather than the other brand's catalogue.
+    """
+    base_url = base_url.rstrip("/")
+    search_url = search_url_for(base_url)
     params = urlencode({
         "query":   query,
         "sortBy":  "topRated",
         "pageSize": 96,
     })
     # Try JSON mode first
-    json_url = f"{SEARCH_URL}?{params}&format=json"
-    html_url = f"{SEARCH_URL}?{params}"
+    json_url = f"{search_url}?{params}&format=json"
+    html_url = f"{search_url}?{params}"
 
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -317,7 +397,7 @@ def fetch_query(session, query):
             print(f"    Rate-limited — waiting {wait:.0f}s")
             time.sleep(wait)
             try:
-                session.get(BASE_URL + "/", impersonate="chrome131", timeout=10)
+                session.get(base_url + "/", impersonate="chrome131", timeout=10)
             except Exception:
                 pass
             continue
@@ -330,19 +410,19 @@ def fetch_query(session, query):
         ct = resp.headers.get("content-type", "")
         if "json" in ct:
             try:
-                products = extract_from_json(resp.json())
+                products = enforce_host(extract_from_json(resp.json(), base_url), base_url)
                 if products:
                     return products
             except Exception:
                 pass
 
         # 2. __NEXT_DATA__
-        products = extract_next_data(resp.text)
+        products = enforce_host(extract_next_data(resp.text, base_url), base_url)
         if products:
             return products
 
         # 3. JSON-LD
-        products = extract_jsonld(resp.text)
+        products = enforce_host(extract_jsonld(resp.text, base_url), base_url)
         if products:
             return products
 
@@ -350,7 +430,9 @@ def fetch_query(session, query):
         if attempt == 1:
             try:
                 resp2 = session.get(html_url, impersonate="chrome131", timeout=25)
-                products = extract_next_data(resp2.text) or extract_jsonld(resp2.text)
+                products = enforce_host(
+                    extract_next_data(resp2.text, base_url)
+                    or extract_jsonld(resp2.text, base_url), base_url)
                 if products:
                     return products
             except Exception:
@@ -410,25 +492,38 @@ def upsert_products(conn, products, category, main_category, source="mediamarkt_
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def scrape_mediamarkt(db_path=None):
+def scrape_ceconomy(base_url, source, label, db_path=None):
+    """Run the search sweep against one Ceconomy storefront.
+
+    Saturn and MediaMarkt differ only in `base_url` and `source`; everything
+    else -- session, search path, parsers, category map -- is shared.
+    """
     if db_path is None:
         db_path = DB_PATH
     conn    = sqlite3.connect(db_path)
-    session = make_session()
+    session = make_session(base_url)
     total_ins = total_upd = 0
 
     for query, cat_label, main_cat in SEARCH_QUERIES:
-        print(f"  MediaMarkt.de  [{cat_label}]")
-        products = fetch_query(session, query)
-        ins, upd = upsert_products(conn, products, cat_label, main_cat)
+        print(f"  {label}  [{cat_label}]")
+        products = fetch_query(session, query, base_url)
+        ins, upd = upsert_products(conn, products, cat_label, main_cat, source=source)
         total_ins += ins
         total_upd += upd
         print(f"    {len(products)} found → {ins} new, {upd} updated")
         time.sleep(DELAY_OK)
 
     conn.close()
-    print(f"\nMediaMarkt.de finished: {total_ins} inserted, {total_upd} updated")
+    print(f"\n{label} finished: {total_ins} inserted, {total_upd} updated")
     return total_ins, total_upd
+
+
+def scrape_mediamarkt(db_path=None):
+    # NOTE: writes source='mediamarkt_de', but the 542 MediaMarkt rows already in
+    # products.db carry source='mediamarkt' (written by server.py's scan path).
+    # Left as-is deliberately -- unifying the two labels is a data decision, not
+    # a scraper one.
+    return scrape_ceconomy(BASE_URL, "mediamarkt_de", "MediaMarkt.de", db_path)
 
 
 if __name__ == "__main__":

@@ -135,6 +135,28 @@ def parse_eur(value):
         return None
 
 
+# A euro price outside this band is not a price, it is a unit bug.  Otto sells
+# nothing for 20 cents and nothing for six figures, so a value outside the band
+# is almost always a factor-of-100 slip.  Drop it loudly rather than write a
+# number that silently poisons every downstream median.  The ceiling is set
+# well above the dearest thing these catalogues carry (a workstation GPU at
+# ~8k EUR) and well below a mid-priced item inflated by 100.  It is a
+# backstop, not a detector: a 59.99 EUR item inflated to 5999 still lands
+# inside the band, which is why the parser, not the guard, is the fix.
+SANE_MIN_EUR = 0.50
+SANE_MAX_EUR = 20_000.0
+
+
+def sane_eur(price, name=None):
+    """Return `price`, or None if it cannot plausibly be a euro amount."""
+    if price is None:
+        return None
+    if SANE_MIN_EUR <= price <= SANE_MAX_EUR:
+        return price
+    print(f"    ! implausible price {price!r} EUR -- dropped ({str(name)[:60]})")
+    return None
+
+
 def parse_float(value):
     if value is None:
         return None
@@ -208,14 +230,17 @@ def _parse_otto_product(item):
     price = None
     p = item.get("price") or item.get("priceData") or {}
     if isinstance(p, dict):
+        # formattedValue first: "349,00 €" states its own unit and so cannot be
+        # misread as cents, whereas a bare `value` is only a number.
         price = parse_eur(
+            p.get("formattedValue") or
             p.get("value") or
             (p.get("regular") or {}).get("value") or
-            (p.get("current") or {}).get("value") or
-            p.get("formattedValue")
+            (p.get("current") or {}).get("value")
         )
     elif isinstance(p, (int, float, str)):
         price = parse_eur(p)
+    price = sane_eur(price, name)
 
     agg    = item.get("aggregateRating") or item.get("rating") or {}
     rating = parse_float(
@@ -286,7 +311,7 @@ def _parse_jsonld(item, out):
     offers = item.get("offers") or {}
     if isinstance(offers, list):
         offers = offers[0] if offers else {}
-    price = parse_eur((offers or {}).get("price"))
+    price = sane_eur(parse_eur((offers or {}).get("price")), name)
     agg   = item.get("aggregateRating") or {}
     out.append({
         "Name":             name,
