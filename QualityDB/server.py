@@ -4637,43 +4637,28 @@ if __name__ == "__main__":
         except Exception as _pre_e:
             print(f"[pre-start] Rank recompute skipped: {_pre_e}", flush=True)
 
-    # ── One-time price corrections (idempotent guards prevent re-running) ──────
-    if os.path.exists(DB_PATH):
-        try:
-            _pc = __import__("sqlite3").connect(DB_PATH, timeout=30)
-            # Otto scraper had a bug: parse_eur("689.00") stripped the period
-            # → stored 68900.0 instead of 689.0.  Fix: divide by 100 when any
-            # Otto price exceeds a plausible maximum (€50 000 for a luxury item).
-            _otto_max = _pc.execute(
-                "SELECT MAX(Price_EUR) FROM products "
-                "WHERE source IN ('otto','otto_de') AND Price_EUR IS NOT NULL"
-            ).fetchone()[0]
-            if _otto_max and _otto_max > 50000:
-                _pc.execute(
-                    "UPDATE products SET Price_EUR = ROUND(Price_EUR / 100.0, 2) "
-                    "WHERE source IN ('otto','otto_de') AND Price_EUR IS NOT NULL"
-                )
-                _pc.commit()
-                print(f"[pre-start] Corrected Otto prices (max was {_otto_max:.0f} → now ÷100)", flush=True)
-            # MediaMarkt scraper had a bug: parse_eur(599) divided int by 100
-            # → stored 5.99 instead of 599.  Fix: multiply by 100 when max is
-            # suspiciously small (< €100 for a category that includes TVs etc.)
-            # Guard: prices < €50 are int-div-100 artifacts (real products start at ~€99)
-            _mm_bad = _pc.execute(
-                "SELECT MAX(Price_EUR) FROM products "
-                "WHERE source IN ('mediamarkt','mediamarkt_de') AND Price_EUR IS NOT NULL "
-                "AND Price_EUR < 50"
-            ).fetchone()[0]
-            if _mm_bad:
-                _pc.execute(
-                    "UPDATE products SET Price_EUR = ROUND(Price_EUR * 100.0, 2) "
-                    "WHERE source IN ('mediamarkt','mediamarkt_de') AND Price_EUR IS NOT NULL"
-                )
-                _pc.commit()
-                print(f"[pre-start] Corrected MediaMarkt prices (max bad was {_mm_bad:.2f} → now ×100)", flush=True)
-            _pc.close()
-        except Exception as _pc_e:
-            print(f"[pre-start] Price correction skipped: {_pc_e}", flush=True)
+    # ── Boot-time price corrections: REMOVED 2026-08-28 ───────────────────────
+    # Two "one-time" UPDATEs used to run here, and neither was one-time.
+    #
+    # The MediaMarkt branch multiplied EVERY mediamarkt row by 100 whenever any
+    # single row was under EUR 50. A catalogue that sells cables and headphones
+    # always has a row under EUR 50, so the condition was true on every boot and
+    # the prices were multiplied by 100 again each time. That is where the
+    # "EUR 34,535 average MediaMarkt price" came from: a PS5 Pro at 899.99
+    # became 89999, an iPhone 15 at 689.99 became 68999. It also silently undid
+    # any repair applied offline -- an uploaded database was re-corrupted within
+    # seconds of the machine restarting, which is how it survived so long.
+    #
+    # The Otto branch had the same shape (divide everything by 100 if the max
+    # exceeds 50000) and the same latent bug; it is gone for the same reason.
+    #
+    # Scale repairs now live in auditable, genuinely idempotent migrations that
+    # record what they changed and skip rows they have already touched:
+    #   QualityDB/migrate_fix_price_eur_units.py       (2026-08-26)
+    #   QualityDB/migrate_repair_sources_20260828.py   (2026-08-28)
+    # and the underlying parse_eur bugs are fixed in the scrapers themselves.
+    # Do not reintroduce a heuristic price rewrite at boot: a guard based on
+    # "does any price look wrong" cannot tell a corrupted row from a cheap one.
 
     # ── Bind HTTP port so Fly.io health checks pass ────────────────────────────
     port = int(os.environ.get("PORT", 8080))

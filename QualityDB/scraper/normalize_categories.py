@@ -910,7 +910,25 @@ def run_normalization(conn: sqlite3.Connection, force: bool = False) -> int:
     """
     ensure_columns(conn)
 
-    scope = "" if force else "WHERE NormalizedCategory IS NULL OR NormalizedCategory = ''"
+    # Rows whose NormalizedCategory was deliberately cleared must stay cleared.
+    # migrate_repair_sources_20260828.py nulls dTest rows whose test subgroup is
+    # not a product type at all -- laundry detergent filed under Washing
+    # Machines, cat food under Smartphones -- because dTest groups its catalogue
+    # by test TOPIC and `Category` therefore names the topic, not the product.
+    # Re-deriving from `Category` here would put every one of them straight
+    # back, which is exactly what happened on the first deploy of that repair.
+    # The guard is skipped entirely on a database that predates the repair
+    # migration, so this stays safe against a fresh or older products.db.
+    _has_repair_col = any(
+        r[1] == "source_repair_method" for r in conn.execute("PRAGMA table_info(products)")
+    )
+    KEEP_NULL = ("source_repair_method IS NULL "
+                 "OR source_repair_method NOT LIKE '%dtest_not_a_product%'"
+                 ) if _has_repair_col else "1=1"
+
+    scope = (f"WHERE ({KEEP_NULL})" if force
+             else f"WHERE (NormalizedCategory IS NULL OR NormalizedCategory = '') "
+                  f"AND ({KEEP_NULL})")
 
     # Count rows to process
     n_todo = conn.execute(f"SELECT COUNT(*) FROM products {scope}").fetchone()[0]
@@ -922,8 +940,7 @@ def run_normalization(conn: sqlite3.Connection, force: bool = False) -> int:
 
     # ── Step 1: exact Category matches (very fast CASE WHEN) ─────────────────
     nc_case, mg_case = _build_sql_case("Category")
-    scope_cond = ("WHERE NormalizedCategory IS NULL OR NormalizedCategory = ''"
-                  if not force else "WHERE 1=1")
+    scope_cond = scope
     conn.execute(f"""
         UPDATE products SET
             NormalizedCategory = {nc_case},
@@ -940,17 +957,19 @@ def run_normalization(conn: sqlite3.Connection, force: bool = False) -> int:
         conn.execute(f"""
             UPDATE products SET NormalizedCategory='{nc_esc}', NormalizedMainGroup='{mg_esc}'
             WHERE (NormalizedCategory IS NULL OR NormalizedCategory = '')
+              AND ({KEEP_NULL})
               AND LOWER(COALESCE(Category,'') || ' ' || COALESCE(MainCategory,'')) LIKE '{pat_esc}'
         """)
 
     log.info("  Keyword-LIKE pass done")
 
     # ── Step 3: remaining rows — use original Category as fallback ───────────
-    conn.execute("""
+    conn.execute(f"""
         UPDATE products SET
             NormalizedCategory  = COALESCE(NULLIF(TRIM(Category),''), 'Other'),
             NormalizedMainGroup = COALESCE(NULLIF(TRIM(MainCategory),''), 'Other')
-        WHERE NormalizedCategory IS NULL OR NormalizedCategory = ''
+        WHERE (NormalizedCategory IS NULL OR NormalizedCategory = '')
+          AND ({KEEP_NULL})
     """)
     log.info("  Fallback pass done")
 
